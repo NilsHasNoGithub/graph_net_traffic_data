@@ -1,12 +1,9 @@
 from dataclasses import dataclass
 from typing import List, AnyStr, Dict, Set, Optional, Iterator
 import cityflow
-from utils import load_json
+from utils import load_json, Point
 
-@dataclass
-class Point:
-    x: int
-    y: int
+
 
 @dataclass
 class Road:
@@ -29,8 +26,10 @@ class Road:
 @dataclass
 class Intersection:
     id: str
-    roads: List[Road]
-    lanes: List[str]
+    incoming_roads: List[Road]
+    outgoing_roads: List[Road]
+    incoming_lanes: List[str]
+    outgoing_lanes: List[str]
     pos: Point
 
     def __eq__(self, other):
@@ -76,23 +75,37 @@ class IntersectionGraph:
         road_map = IntersectionGraph.get_road_map(roadnet)
 
         for intersection_dict in roadnet["intersections"]:
+
             if len(intersection_dict["roadLinks"]) > 0:
 
-                roads = []
-                lanes = []
+                intersect_id = intersection_dict["id"]
+
+                incoming_roads = []
+                outgoing_roads = []
+                incoming_lanes = []
+                outgoing_lanes = []
 
                 for road_id in intersection_dict["roads"]:
 
+
                     road = road_map[road_id]
+
                     lane_ids = road.lanes
 
-                    lanes.extend(lane_ids)
-                    roads.append(road)
+                    if road.start_intersection_id == intersect_id:
+                        outgoing_lanes.extend(lane_ids)
+                        outgoing_roads.append(road)
+                    else:
+                        assert road.end_intersection_id == intersect_id
+                        incoming_lanes.extend(lane_ids)
+                        incoming_roads.append(road)
 
                 result.append(Intersection(
-                    intersection_dict["id"],
-                    roads,
-                    lanes,
+                    intersect_id,
+                    incoming_roads,
+                    outgoing_roads,
+                    incoming_lanes,
+                    outgoing_lanes,
                     Point(
                         intersection_dict["point"]["x"],
                         intersection_dict["point"]["y"]
@@ -118,7 +131,7 @@ class IntersectionGraph:
                 inter0 = intersections[i0]
                 inter1 = intersections[i1]
 
-                if len(set(inter0.lanes).intersection(inter1.lanes)) > 0:
+                if len(set(inter0.incoming_lanes).intersection(inter1.outgoing_lanes)) > 0:
                     adj_dict[inter0].add(inter1)
                     adj_dict[inter1].add(inter0)
 

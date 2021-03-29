@@ -1,7 +1,8 @@
 import torch
+from torch import Tensor
 from torch.utils.data import Dataset
 from typing import List, Dict, Iterator, AnyStr
-from generate_graph import IntersectionGraph
+from generate_graph import IntersectionGraph, Intersection
 from utils import load_json
 
 class LaneVehicleCountDataset(Dataset):
@@ -37,7 +38,7 @@ class LaneVehicleCountDataset(Dataset):
         for counts_dict in self._data:
             result = []
             for intersection in self._graph.intersection_list():
-                result.append([float(counts_dict[road_id]) for road_id in intersection.lanes])
+                result.append([float(counts_dict[road_id]) for road_id in intersection.incoming_lanes])
             yield result
 
     def get_feature_vecs(self, t: int) -> List[List[float]]:
@@ -45,10 +46,40 @@ class LaneVehicleCountDataset(Dataset):
         result = []
 
         for intersection in self._graph.intersection_list():
-            counts = [float(self._data[t][lane_id]) for lane_id in intersection.lanes]
+            counts = [float(self._data[t][lane_id]) for lane_id in intersection.incoming_lanes]
             result.append(counts)
 
         return result
+
+    def get_feature_dict(self, t: int) -> Dict[str, Dict[str, float]]:
+        result = {}
+
+        for intersection in self._graph.intersection_list():
+            counts = {lane_id: float(self._data[t][lane_id]) for lane_id in intersection.incoming_lanes}
+            result[intersection.id] = counts
+
+        return result
+
+    def get_features_per_intersection(self, t: Tensor) -> Dict[str, Dict[str, float]]:
+        """
+
+        :param t: Tensor should be of shape [n_agents, n_features]
+        :return: Map from intersection id to the vehicles on each intersection
+        """
+
+        n_intersections, n_features = t.size()
+        intersections = self._graph.intersection_list()
+
+        result = {}
+
+        for i in range(n_intersections):
+            feats = t[i, :]
+            intersection: Intersection = intersections[i]
+            lane_counts = {lane_id: feats[i].item() for (i, lane_id) in enumerate(intersection.incoming_lanes)}
+            result[intersection.id] = lane_counts
+
+        return result
+
 
     def __len__(self):
         return len(self._data)
@@ -56,3 +87,15 @@ class LaneVehicleCountDataset(Dataset):
     def __getitem__(self, idx) -> torch.Tensor:
         feature_vecs = self.get_feature_vecs(idx)
         return torch.tensor(feature_vecs, dtype=torch.float32)
+
+
+if __name__ == "__main__":
+    roadnet_file = "sample-code/data/manhattan_16x3/roadnet_16_3.json"
+    data_file = "generated_data/manhattan_16_3_data.json"
+    data_train, data_val = LaneVehicleCountDataset.train_test_from_files(roadnet_file, data_file)
+
+    t = 600
+    a = data_train[t]
+
+    print(data_train.get_features_per_intersection(a))
+    print(data_train.get_feature_dict(t))

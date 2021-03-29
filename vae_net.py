@@ -64,7 +64,7 @@ class VAENet(nn.Module):
         
         loc, scale = self.decoder(x)
 
-        x = rsample_log_normal_distr(loc, scale)
+        x = rsample_normal_distr(loc, scale)
 
         # x = x.view(batch_size, *original_size)
 
