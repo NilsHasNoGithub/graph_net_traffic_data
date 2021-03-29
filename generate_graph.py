@@ -4,9 +4,34 @@ import cityflow
 from utils import load_json
 
 @dataclass
-class Intersection:
+class Point:
+    x: float
+    y: float
+
+@dataclass
+class Road:
     id: str
     lanes: List[str]
+    start_intersection_id: str
+    end_intersection_id: str
+    start: Point
+    end: Point
+
+    def __eq__(self, other):
+        if isinstance(other, Road):
+            return self.id == other.id
+        return False
+
+    def __hash__(self):
+        return
+
+
+@dataclass
+class Intersection:
+    id: str
+    roads: List[Road]
+    lanes: List[str]
+    pos: Point
 
     def __eq__(self, other):
         if isinstance(other, Intersection):
@@ -24,7 +49,7 @@ class Intersection:
 class IntersectionGraph:
 
     @staticmethod
-    def get_road_lane_map(roadnet: dict) -> Dict[str, List[str]]:
+    def get_road_map(roadnet: dict) -> Dict[str, Road]:
         result = {}
 
         for road in roadnet["roads"]:
@@ -32,7 +57,14 @@ class IntersectionGraph:
             n_lanes = len(road["lanes"])
 
             lane_ids = [f"{id}_{i}" for i in range(n_lanes)]
-            result[id] = lane_ids
+            result[id] = Road(
+                id,
+                lane_ids,
+                road["startIntersection"],
+                road["endIntersection"],
+                Point(road["points"][0]["x"], road["points"][0]["y"]),
+                Point(road["points"][1]["x"], road["points"][1]["y"]),
+            )
 
         return result
 
@@ -41,19 +73,30 @@ class IntersectionGraph:
     def create_intersections(roadnet: dict) -> List[Intersection]:
         result = []
 
-        road_lane_map = IntersectionGraph.get_road_lane_map(roadnet)
+        road_map = IntersectionGraph.get_road_map(roadnet)
 
         for intersection_dict in roadnet["intersections"]:
             if len(intersection_dict["roadLinks"]) > 0:
 
+                roads = []
                 lanes = []
 
-                for road in intersection_dict["roads"]:
-                    lanes.extend(road_lane_map[road])
+                for road_id in intersection_dict["roads"]:
+
+                    road = road_map[road_id]
+                    lane_ids = road.lanes
+
+                    lanes.extend(lane_ids)
+                    roads.append(road)
 
                 result.append(Intersection(
                     intersection_dict["id"],
-                    lanes
+                    roads,
+                    lanes,
+                    Point(
+                        intersection_dict["point"]["x"],
+                        intersection_dict["point"]["y"]
+                    ),
                 ))
 
         return result

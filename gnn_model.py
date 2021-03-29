@@ -25,6 +25,16 @@ class IntersectionGNN(nn.Module):
         return result / len(hs)
 
     @staticmethod
+    def _max_aggregate(*hs):
+        if len(hs) == 0:
+            raise ValueError()
+        # h: [batch, feats]
+        hs = torch.stack(hs, dim=1)
+        # hs: [batch, agents, feats]
+        _, result = torch.max(hs, dim=1)
+        return result
+
+    @staticmethod
     def from_model_state(state: IntersectionGNNState) -> "IntersectionGNN":
         model = IntersectionGNN(state.sizes, state.adj_list)
         model.load_state_dict(state.state_dict)
@@ -44,7 +54,7 @@ class IntersectionGNN(nn.Module):
         self._sizes = sizes
         self._adj_list = adj_list
 
-        self._agg = IntersectionGNN._mean_aggregate
+        self._agg = IntersectionGNN._max_aggregate
         self._activation = nn.ReLU()
 
         self._concats = nn.ModuleList(

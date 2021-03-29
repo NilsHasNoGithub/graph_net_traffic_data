@@ -35,17 +35,21 @@ class GNNVAEModel(nn.Module):
 
         n_intersetions = len(adj_list)
 
+
+
+        sizes = [n_features, int(n_features * (5 / 6)), int(n_features * (2 / 3)), int(n_features * (1 / 2))]
+
         if n_hidden is None:
-            n_hidden = (n_intersetions*n_features)//3
+            n_hidden = sizes[-1]
 
         self._n_hidden = n_hidden
         self._n_features = n_features
         self._adj_list = adj_list
 
-        sizes = [n_features, int(n_features * (5/6)), int(n_features * (2/3)), int(n_features * (1/2))]
+
 
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
-        self._vae_net = VAENet(sizes[-1]*n_intersetions, n_hidden=n_hidden)
+        self._vae_net = VAENet(sizes[-1], n_hidden=n_hidden)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
         self._to_out = nn.Linear(n_features, n_features)
 

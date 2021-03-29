@@ -61,7 +61,7 @@ def main():
 
     # pars = model.parameters()
 
-    print(*[p.numel() for p in model.parameters()])
+    print(sum(p.numel() for p in model.parameters()))
 
     # print(torch.round(model.sample()))
 

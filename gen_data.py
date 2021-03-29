@@ -6,6 +6,7 @@ import argparse
 import pandas as pd
 import json
 from utils import store_json
+import random
 
 
 N_STEPS = 3600
@@ -41,6 +42,7 @@ def collect_data(engine: cityflow.Engine, n_steps: int, reset_pre=True, reset_po
     if reset_post:
         engine.reset()
 
+    random.shuffle(data)
     return data
 
 def main(args: Args = None):

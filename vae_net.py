@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as funct
 from torch.tensor import Tensor
 from torch.distributions.normal import Normal
+from torch.distributions.log_normal import LogNormal
 import numpy as np
 from typing import Tuple
 
@@ -12,6 +13,9 @@ def rsample_normal_distr(loc, scale) -> Tensor:
     distr = Normal(loc, scale)
     return distr.rsample()
 
+def rsample_log_normal_distr(loc, scale) -> Tensor:
+    distr = LogNormal(loc, scale)
+    return distr.sample()
 
 @dataclass
 class VAENetData:
@@ -52,7 +56,7 @@ class VAENet(nn.Module):
         :return:
         """
         
-        batch_size, *original_size = x.size()
+        # batch_size, *original_size = x.size()
 
         enc_loc, enc_scale = self.encoder(x)
 
@@ -60,9 +64,9 @@ class VAENet(nn.Module):
         
         loc, scale = self.decoder(x)
 
-        x = rsample_normal_distr(loc, scale)
+        x = rsample_log_normal_distr(loc, scale)
 
-        x = x.view(batch_size, *original_size)
+        # x = x.view(batch_size, *original_size)
 
         if calc_kl_div:
             kl_loss = torch.log(1.0 / enc_scale) + (enc_scale ** 2.0 + enc_loc ** 2.0) / (2.0 * 1.0) - 0.5
@@ -113,15 +117,17 @@ def extract_distr_params(x: Tensor):
     # Parameters:
     - `x` with input shape `[a, b*2]`
     """
-
-    batch_size, distr_params = x.size()
+    n_dims = len(x.size())
+    *dims, distr_params = x.size()
     assert distr_params % 2 == 0, "There must be a mean and variance parameter for each feature"
 
-    # view mean and variance seperately [batch_size, 2, n_hidden]
-    x = x.view(batch_size, 2, distr_params//2)
+    # view mean and variance seperately [batch_size, 2    , n_hidden]
+    x = x.view(*dims, 2, distr_params // 2)
 
-    loc = x[:, 0, :]
-    scale = x[:, 1, :]
+    distr_param_idx = n_dims - 1
+
+    loc = x.index_select(distr_param_idx, torch.tensor([0]).to(x.device)).squeeze()
+    scale = x.index_select(distr_param_idx, torch.tensor([1]).to(x.device)).squeeze()
 
     scale = funct.softplus(scale)
     scale = torch.add(scale, 0.00000001)
@@ -141,10 +147,6 @@ class VAEEncoder(nn.Module):
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
 
-        batch_size, *_ = x.size()
-
-        x = x.view(batch_size, -1)
-        
         x = self.to_encoded(x)
 
         loc, scale = extract_distr_params(x)
@@ -169,9 +171,10 @@ class VAEDecoder(nn.Module):
         self.decoder = nn.Linear(n_hidden_states, 2*self.n_features)
 
     def forward(self, x: Tensor):
-        batch_size, *_ = x.size()
+        # batch_size, *_ = x.size()
+        #
+        # x = x.view(batch_size, -1)
 
-        x = x.view(batch_size, -1)
         x = self.decoder(x)
 
         loc, scale = extract_distr_params(x)
