@@ -5,8 +5,8 @@ from utils import load_json
 
 @dataclass
 class Point:
-    x: float
-    y: float
+    x: int
+    y: int
 
 @dataclass
 class Road:
