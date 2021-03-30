@@ -76,6 +76,11 @@ def draw(ctx: cairo.Context, graph: IntersectionGraph, data_sample):
         all_roads = intersection.incoming_roads + intersection.outgoing_roads
 
         for index, road in enumerate(all_roads):
+            if index >= len(intersection.incoming_roads):
+                ctx.set_source_rgb(255, 0, 0)
+            else:
+                ctx.set_source_rgb(0, 0, 0)
+
             if road.start_intersection_id not in adj_dict_drawn_road_count:
                 adj_dict_drawn_road_count[road.start_intersection_id] = {}
                 adj_dict_drawn_road_count[road.start_intersection_id][road.end_intersection_id] = 0
@@ -83,10 +88,6 @@ def draw(ctx: cairo.Context, graph: IntersectionGraph, data_sample):
 
             for lane in road.lanes:
                 if lane not in placed_lane_set:
-                    car_amount = data_sample[lane]
-                    redness = car_amount / 10
-                    ctx.set_source_rgb(redness, 0, 0) # Range: [0, 1]
-
                     offset = adj_dict_drawn_road_count[road.start_intersection_id][road.end_intersection_id]
                     line(ctx, road.start, road.end, offset * 3)
                     adj_dict_drawn_road_count[road.start_intersection_id][road.end_intersection_id] += 1
@@ -96,7 +97,7 @@ def draw(ctx: cairo.Context, graph: IntersectionGraph, data_sample):
         position = intersection.pos
         ctx.set_line_join(cairo.LINE_JOIN_ROUND)
         ctx.set_source_rgb(0, 0, 0)
-        fill_shapes(ctx, position.x - 5 + 400, position.y + 100 - 5) # Draw square
+        fill_shapes(ctx, position.x - 5 + 400, position.y + 100 - 5)
         """
         offset = 0
         index = 0
