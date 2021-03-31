@@ -2,6 +2,7 @@ import json
 from typing import AnyStr, Union
 import torch
 from dataclasses import dataclass
+from math import sqrt
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # DEVICE = torch.device("cpu")
@@ -27,3 +28,35 @@ class Point:
             return self.y
 
         raise ValueError("index must be 1 or 0")
+
+    def __add__(self, other):
+        if not isinstance(other, Point):
+            raise ValueError()
+
+        return Point(
+            self.x + other.x,
+            self.y + other.y
+        )
+
+    def __sub__(self, other):
+        if not isinstance(other, Point):
+            raise ValueError()
+
+        return Point(
+            self.x - other.x,
+            self.y - other.y
+        )
+
+    def __iter__(self):
+        return iter((self.x, self.y))
+
+    def distance(self, other):
+
+        if not isinstance(other, Point):
+            raise ValueError()
+
+        dx = other.x - self.x
+        dy = other.y - self.y
+
+        dist = sqrt(dx ** 2 + dy ** 2)
+        return dist

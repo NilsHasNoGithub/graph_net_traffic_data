@@ -60,7 +60,7 @@ class LaneVehicleCountDataset(Dataset):
 
         return result
 
-    def get_features_per_intersection(self, t: Tensor) -> Dict[str, float]:
+    def extract_vehicles_per_lane(self, t: Tensor) -> Dict[str, float]:
         """
 
         :param t: Tensor should be of shape [n_agents, n_features]
@@ -75,8 +75,8 @@ class LaneVehicleCountDataset(Dataset):
         for i in range(n_intersections):
             feats = t[i, :]
             intersection: Intersection = intersections[i]
-            for i, lane_id in enumerate(intersection.incoming_lanes):
-                result[lane_id] = feats[i].item()
+            for j, lane_id in enumerate(intersection.incoming_lanes):
+                result[lane_id] = feats[j].item()
 
         return result
 
@@ -97,5 +97,5 @@ if __name__ == "__main__":
     t = 600
     a = data_train[t]
 
-    print(data_train.get_features_per_intersection(a))
+    print(data_train.extract_vehicles_per_lane(a))
     print(data_train.get_feature_dict(t))

@@ -22,6 +22,9 @@ class Road:
     def __hash__(self):
         return
 
+    def length(self):
+        return self.start.distance(self.end)
+
 
 @dataclass
 class Intersection:
@@ -115,8 +118,8 @@ class IntersectionGraph:
         return result
 
     @staticmethod
-    def get_intersection_graph(roadnet_file: AnyStr) -> Dict[Intersection, Set[Intersection]]:
-        roadnet: dict = load_json(roadnet_file)
+    def get_intersection_graph(roadnet: dict) -> Dict[Intersection, Set[Intersection]]:
+
 
         intersections = IntersectionGraph.create_intersections(roadnet)
 
@@ -142,7 +145,12 @@ class IntersectionGraph:
 
         :param roadnet_file:
         """
-        self.adj_dict = IntersectionGraph.get_intersection_graph(roadnet_file)
+
+        roadnet: dict = load_json(roadnet_file)
+        self.adj_dict = IntersectionGraph.get_intersection_graph(roadnet)
+
+        road_map = IntersectionGraph.get_road_map(roadnet)
+        self._road_list = list(road_map.values())
 
         self._intersection_list: List[Intersection] = []
         self._intersection_to_idx: Dict[Intersection, int] = {}
@@ -157,6 +165,13 @@ class IntersectionGraph:
         :return:
         """
         return self._intersection_list
+
+    def road_list(self):
+        """
+        All roads in the graph
+        :return:
+        """
+        return self._road_list
 
     def idx_adjacency_lists(self) -> List[List[int]]:
         """
@@ -175,8 +190,6 @@ class IntersectionGraph:
             result.append(nbs)
 
         return result
-
-
 
 if __name__ == '__main__':
     data = load_json("generated_data/manhattan_16_3_data.json")

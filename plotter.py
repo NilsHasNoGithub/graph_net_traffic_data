@@ -1,117 +1,247 @@
 import math
+from copy import deepcopy
+from typing import Dict, Iterable, Tuple
 
 import cairo
+from cairo import Context as CContext
 
-from generate_graph import IntersectionGraph, Point
+from generate_graph import IntersectionGraph, Point, Road, Intersection
 from utils import load_json
 
-SIZE = 10
+from load_data import LaneVehicleCountDataset
+from math import sqrt, asin, pi, atan
+
+class RoadPlotter:
+
+    @staticmethod
+    def _get_road_extreme_vals(roads: Iterable[Road]) -> Tuple[Point, Point]:
+        """
+        :param roads:
+        :return: a point with min_x and min_y and one with max_x and max_y
+        """
+        road_min_x = math.inf
+        road_min_y = math.inf
+        road_max_x = -math.inf
+        road_max_y = -math.inf
+
+        for road in roads:
+            min_x = min(road.start.x, road.end.x)
+            max_x = max(road.start.x, road.end.x)
+            min_y = min(road.start.y, road.end.y)
+            max_y = max(road.start.y, road.end.y)
+
+            if min_x < road_min_x:
+                road_min_x = min_x
+
+            if min_y < road_min_y:
+                road_min_y = min_y
+
+            if max_x > road_max_x:
+                road_max_x = max_x
+
+            if max_y > road_max_y:
+                road_max_y = max_y
+
+        return (
+            Point(road_min_x, road_min_y),
+            Point(road_max_x, road_max_y)
+        )
+
+    @staticmethod
+    def _calc_data_max(graph: IntersectionGraph, data: Dict[str, float]):
+        max_ = 0
+
+        for intersection in graph.intersection_list():
+            for road in intersection.incoming_roads:
+                for lane_id in road.lanes:
+                    val = data[lane_id] / road.length()
+                    if val > max_:
+                        max_ = val
+
+        return max_
+
+    def __init__(self, graph: IntersectionGraph, data: Dict[str, float], intersection_size=40, padding=30, legend_width=100, legend_height=500):
+        """
+
+        :param ctx: Cairo context
+        :param graph: Intersection graph containing data to draw
+        :param data: data to display on edges
+        """
+        graph = deepcopy(graph)
+
+        self._min_point, self._max_point = RoadPlotter._get_road_extreme_vals(graph.road_list())
+
+        self._min_point -= Point(padding, padding)
+        self._max_point += Point(padding, padding)
+
+        width, height = self._max_point - self._min_point
+        width += legend_width + 2*padding
+
+        min_height = 2*padding + legend_height
+        height = max(height, min_height)
+
+        self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+        self._ctx = cairo.Context(self._surface)
+        self._data = data
+        self._graph = graph
+        self._intersection_size = intersection_size
+        self._legend_height = legend_height
+        self._legend_width = legend_width
+        self._padding = padding
+        self._width = width
+        self._height = height
+
+        self._data_max = RoadPlotter._calc_data_max(graph, data)
+
+        # for intersection in graph.intersection_list():
+        #     intersection.pos.y = height - intersection.pos.y
+        #
+        #     for road in intersection.incoming_roads + intersection.outgoing_roads:
+        #         road.start.y = height - road.start.y
+        #         road.end.y = height - road.end.y
+        #
+        # for road in graph.road_list():
+        #     road.start.y = height - road.start.y
+        #     road.end.y = height - road.end.y
 
 
-def line(ctx: cairo.Context, pos1, pos2, offset):
-    x_offset, y_offset = 0, 0
+    def _draw_intersections_and_lanes(self):
+        intersections = self._graph.intersection_list()
 
-    # Infer if the x changes of the roads, then we should offset with y.
-    if pos1.x == pos2.x:
-        x_offset = offset
-    else:
-        # If the y changes then we should offset with x.
-        y_offset = offset
+        for intersection in intersections:
+            self._draw_intersection(intersection)
 
-    ctx.move_to(pos1.x + x_offset, pos1.y + y_offset)
-    ctx.line_to(pos2.x + x_offset, pos2.y + y_offset)
-    ctx.stroke()
+        for intersection in intersections:
+            pos = intersection.pos - self._min_point
+            pos.y = self._height - pos.y
+            self._draw_circle(pos, self._intersection_size)
 
-    print("[", pos1.x + x_offset, pos1.y + y_offset, "]", "[", pos2.x + x_offset, pos2.y + y_offset, "]")
-
-
-def square(ctx):
-    ctx.move_to(0, 0)
-    ctx.rel_line_to(2 * SIZE, 0)
-    ctx.rel_line_to(0, 2 * SIZE)
-    ctx.rel_line_to(-2 * SIZE, 0)
-    ctx.close_path()
+    def draw_all(self):
+        self._draw_intersections_and_lanes()
+        self._draw_legend()
 
 
-def draw_shapes(ctx: cairo.Context, x, y, fill):
-    ctx.save()
+    def get_surface(self) -> cairo.Surface:
+        return self._surface
 
-    ctx.new_path()
-    ctx.translate(x, y)
-    square(ctx)
-    if fill:
-        ctx.fill()
-    else:
+    def _calc_rgb_from_business(self, business: float):
+        assert 0.0 <= business <= 1.0
+        return business, 0.5 - 0.5 * business, 0.0
+
+    def _calc_lane_rgb_val(self, lane_id: str, road: Road) -> (float, float, float):
+        vh_count = self._data[lane_id]
+        business = max(0.0, (vh_count/road.length())/self._data_max)
+
+        return self._calc_rgb_from_business(business)
+
+    def _draw_intersection(self, intersection: Intersection):
+        for road_or in intersection.incoming_roads:
+            road = deepcopy(road_or)
+            road.start -= self._min_point
+            road.start.y = self._height - road.start.y
+            road.end -= self._min_point
+            road.end.y = self._height - road.end.y
+            self._draw_lanes(road, True)
+
+    def _draw_legend(self, txt_size=30, txt_spacing=15):
+        ctx = self._ctx
+
+        ctx.save()
+
+        legend_pos = Point(
+            self._width - self._padding - self._legend_width,
+            self._padding + txt_spacing
+        )
+
+        for i in range(self._legend_height-2*txt_spacing):
+            business = 1-(i/(self._legend_height-1))
+            ctx.set_source_rgb(*self._calc_rgb_from_business(business))
+            ctx.rectangle(*(legend_pos + Point(0, i)), self._legend_width, 1)
+            ctx.fill()
+
+        ctx.set_source_rgb(0,0,0)
+        ctx.set_font_size(txt_size)
+        ctx.move_to(*(legend_pos + Point(0, -2)))
+        ctx.show_text("{:.2f}".format(self._data_max))
+
+        ctx.move_to(*(legend_pos + Point(0, self._legend_height)))
+        ctx.show_text("0")
+        ctx.restore()
+
+
+    def _draw_lanes(self, road: Road, is_incoming: bool, offset=3):
+        start = road.start
+        end = road.end
+
+        rel_end = end - start
+
+        road_len = start.distance(end)
+
+        angle = -atan((rel_end.x / rel_end.y) if rel_end.y != 0 else math.inf)
+
+        ctx = self._ctx
+
+        ctx.save()
+
+        if rel_end.y < 0 or (rel_end.x < 0 and rel_end.y == 0):
+            angle += pi
+
+        # if rel_end.y == 0:
+        #     offset *= -1
+
+        # angle += pi
+
+        if is_incoming:
+            offset *= -1
+
+        for i, lane_id in enumerate(road.lanes):
+            ctx.move_to(start.x, start.y)
+            ctx.rotate(angle)
+            ctx.set_source_rgb(*self._calc_lane_rgb_val(lane_id, road))
+            # ctx.set_source_rgb(i*(1/2),0,0)
+            self._draw_line_rel(Point((i + 1) * offset, 0), Point(0, road_len))
+
+            ctx.rotate(-angle)
+        ctx.restore()
+
+
+    def _draw_line_rel(self, pos1: Point, pos2: Point, width=2.5):
+        ctx = self._ctx
+        ctx.set_line_width(width)
+        ctx.rel_move_to(pos1.x, pos1.y)
+        ctx.rel_line_to(pos2.x, pos2.y)
         ctx.stroke()
 
-    ctx.restore()
+    def _draw_circle(self, pos: Point, size):
+        ctx = self._ctx
+
+        x, y = pos.x, pos.y
+
+        ctx.arc(x, y, size/2, 0, 2*pi)
+        ctx.fill()
 
 
-def fill_shapes(ctx, x, y):
-    draw_shapes(ctx, x, y, True)
-
-
-def stroke_shapes(ctx, x, y):
-    draw_shapes(ctx, x, y, False)
-
-
-def draw(ctx: cairo.Context, graph: IntersectionGraph):
-    ctx.set_source_rgb(0, 0, 0)
-
-    ctx.set_line_width(0.25)
-    ctx.set_tolerance(0.1)
-
-    for intersection in graph.intersection_list():
-        position = intersection.pos
-        ctx.set_line_join(cairo.LINE_JOIN_ROUND)
-        fill_shapes(ctx, position.x, position.y)
-
-        for index, road in enumerate(intersection.roads):
-            index += 0.5
-            line(ctx, road.start, road.end, index * 2)
-
-    # line(ctx, Point(0, 0), Point(2000,2000), 0)
-    # line(ctx, Point(2000, 0), Point(0, 2000), 0)
-
-    """
-    ctx.set_line_join(cairo.LINE_JOIN_ROUND)
-    ctx.set_dash([SIZE / 4.0, SIZE / 4.0], 0)
-    stroke_shapes(ctx, 0, 0)
-
-    ctx.set_dash([], 0)
-    stroke_shapes(ctx, 0, 3 * SIZE)
-
-    ctx.set_line_join(cairo.LINE_JOIN_BEVEL)
-    stroke_shapes(ctx, 0, 6 * SIZE)
-
-    ctx.set_line_join(cairo.LINE_JOIN_MITER)
-    stroke_shapes(ctx, 0, 9 * SIZE)
-
-    fill_shapes(ctx, 0, 12 * SIZE)
-
-    ctx.set_line_join(cairo.LINE_JOIN_BEVEL)
-    fill_shapes(ctx, 0, 15 * SIZE)
-    ctx.set_source_rgb(1, 0, 0)
-    stroke_shapes(ctx, 0, 15 * SIZE)
-    """
 
 
 def main():
-    data = load_json("generated_data/manhattan_16_3_data.json")
+    roadnet_file = "sample-code/data/manhattan_16x3/roadnet_16_3.json"
+    data_file = "generated_data/manhattan_16_3_data.json"
 
-    graph = IntersectionGraph("sample-code/data/manhattan_16x3/roadnet_16_3.json")
+
+    data_set = LaneVehicleCountDataset.from_files(roadnet_file, data_file)
+
+    graph = IntersectionGraph(roadnet_file)
     adj_dict = graph.adj_dict
 
     n_intersections = 48
     n_intersections_per_row = 3
     n_intersections_per_height = math.ceil(n_intersections / n_intersections_per_row)
-    WIDTH, HEIGHT = 2000, 3000
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
-    ctx = cairo.Context(surface)
+    drawer = RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[600]))
 
-    draw(ctx, graph)
+    drawer.draw_all()
 
-    surface.write_to_png("test.png")
+
+    drawer.get_surface().write_to_png("test.png")
 
 
 if __name__ == '__main__':
