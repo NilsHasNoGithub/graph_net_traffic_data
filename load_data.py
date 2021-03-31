@@ -28,6 +28,9 @@ class LaneVehicleCountDataset(Dataset):
         self._data = data[:i_split] if train else data[i_split:]
         self._graph = graph
 
+    def graph(self) -> IntersectionGraph:
+        return self._graph
+
     def sample_shape(self) -> torch.Size:
         return self[0].shape
 

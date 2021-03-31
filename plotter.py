@@ -4,6 +4,7 @@ from typing import Dict, Iterable, Tuple
 
 import cairo
 from cairo import Context as CContext
+from torch import Tensor
 
 from generate_graph import IntersectionGraph, Point, Road, Intersection
 from utils import load_json
@@ -11,7 +12,8 @@ from utils import load_json
 from load_data import LaneVehicleCountDataset
 from math import sqrt, asin, pi, atan
 
-class RoadPlotter:
+
+class _RoadPlotter:
 
     @staticmethod
     def _get_road_extreme_vals(roads: Iterable[Road]) -> Tuple[Point, Point]:
@@ -60,7 +62,15 @@ class RoadPlotter:
 
         return max_
 
-    def __init__(self, graph: IntersectionGraph, data: Dict[str, float], intersection_size=40, padding=30, legend_width=100, legend_height=500):
+    def __init__(
+            self,
+            graph: IntersectionGraph,
+            data: Dict[str, float],
+            intersection_size=55,
+            padding=30,
+            legend_width=100,
+            legend_height=500
+    ):
         """
 
         :param ctx: Cairo context
@@ -69,15 +79,15 @@ class RoadPlotter:
         """
         graph = deepcopy(graph)
 
-        self._min_point, self._max_point = RoadPlotter._get_road_extreme_vals(graph.road_list())
+        self._min_point, self._max_point = _RoadPlotter._get_road_extreme_vals(graph.road_list())
 
         self._min_point -= Point(padding, padding)
         self._max_point += Point(padding, padding)
 
         width, height = self._max_point - self._min_point
-        width += legend_width + 2*padding
+        width += legend_width + 2 * padding
 
-        min_height = 2*padding + legend_height
+        min_height = 2 * padding + legend_height
         height = max(height, min_height)
 
         self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
@@ -91,19 +101,9 @@ class RoadPlotter:
         self._width = width
         self._height = height
 
-        self._data_max = RoadPlotter._calc_data_max(graph, data)
+        self._data_max = _RoadPlotter._calc_data_max(graph, data)
 
-        # for intersection in graph.intersection_list():
-        #     intersection.pos.y = height - intersection.pos.y
-        #
-        #     for road in intersection.incoming_roads + intersection.outgoing_roads:
-        #         road.start.y = height - road.start.y
-        #         road.end.y = height - road.end.y
-        #
-        # for road in graph.road_list():
-        #     road.start.y = height - road.start.y
-        #     road.end.y = height - road.end.y
-
+        self._drawn_road_ids = set()
 
     def _draw_intersections_and_lanes(self):
         intersections = self._graph.intersection_list()
@@ -112,14 +112,24 @@ class RoadPlotter:
             self._draw_intersection(intersection)
 
         for intersection in intersections:
+            for road in intersection.outgoing_roads:
+                if road.id not in self._drawn_road_ids:
+                    self._draw_lanes(road, False)
+
+        for intersection in intersections:
             pos = intersection.pos - self._min_point
             pos.y = self._height - pos.y
             self._draw_circle(pos, self._intersection_size)
 
     def draw_all(self):
+        ctx = self._ctx
+        ctx.save()
+        ctx.set_source_rgb(1,1,1)
+        ctx.paint()
+        ctx.restore()
+
         self._draw_intersections_and_lanes()
         self._draw_legend()
-
 
     def get_surface(self) -> cairo.Surface:
         return self._surface
@@ -130,20 +140,16 @@ class RoadPlotter:
 
     def _calc_lane_rgb_val(self, lane_id: str, road: Road) -> (float, float, float):
         vh_count = self._data[lane_id]
-        business = max(0.0, (vh_count/road.length())/self._data_max)
+        business = max(0.0, (vh_count / road.length()) / self._data_max)
 
         return self._calc_rgb_from_business(business)
 
     def _draw_intersection(self, intersection: Intersection):
-        for road_or in intersection.incoming_roads:
-            road = deepcopy(road_or)
-            road.start -= self._min_point
-            road.start.y = self._height - road.start.y
-            road.end -= self._min_point
-            road.end.y = self._height - road.end.y
+        for road in intersection.incoming_roads:
+            self._drawn_road_ids.add(road.id)
             self._draw_lanes(road, True)
 
-    def _draw_legend(self, txt_size=30, txt_spacing=15):
+    def _draw_legend(self, txt_size=30, txt_spacing=20):
         ctx = self._ctx
 
         ctx.save()
@@ -153,13 +159,13 @@ class RoadPlotter:
             self._padding + txt_spacing
         )
 
-        for i in range(self._legend_height-2*txt_spacing):
-            business = 1-(i/(self._legend_height-1))
+        for i in range(self._legend_height - int(1.5 * txt_spacing)):
+            business = 1 - (i / (self._legend_height - 1))
             ctx.set_source_rgb(*self._calc_rgb_from_business(business))
             ctx.rectangle(*(legend_pos + Point(0, i)), self._legend_width, 1)
             ctx.fill()
 
-        ctx.set_source_rgb(0,0,0)
+        ctx.set_source_rgb(0, 0, 0)
         ctx.set_font_size(txt_size)
         ctx.move_to(*(legend_pos + Point(0, -2)))
         ctx.show_text("{:.2f}".format(self._data_max))
@@ -168,10 +174,15 @@ class RoadPlotter:
         ctx.show_text("0")
         ctx.restore()
 
+    def _draw_lanes(self, road: Road, is_incoming: bool, offset=5.5):
+        start = deepcopy(road.start)
+        end = deepcopy(road.end)
 
-    def _draw_lanes(self, road: Road, is_incoming: bool, offset=3):
-        start = road.start
-        end = road.end
+        start -= self._min_point
+        start.y = self._height - start.y
+
+        end -= self._min_point
+        end.y = self._height - end.y
 
         rel_end = end - start
 
@@ -186,47 +197,52 @@ class RoadPlotter:
         if rel_end.y < 0 or (rel_end.x < 0 and rel_end.y == 0):
             angle += pi
 
-        # if rel_end.y == 0:
-        #     offset *= -1
+        offset *= -1
 
-        # angle += pi
-
-        if is_incoming:
-            offset *= -1
-
-        for i, lane_id in enumerate(road.lanes):
+        for i, lane_id in enumerate(sorted(road.lanes)):
             ctx.move_to(start.x, start.y)
             ctx.rotate(angle)
-            ctx.set_source_rgb(*self._calc_lane_rgb_val(lane_id, road))
+            if is_incoming:
+                ctx.set_source_rgb(*self._calc_lane_rgb_val(lane_id, road))
+            else:
+                ctx.set_source_rgb(0,0,0)
             # ctx.set_source_rgb(i*(1/2),0,0)
             self._draw_line_rel(Point((i + 1) * offset, 0), Point(0, road_len))
 
             ctx.rotate(-angle)
         ctx.restore()
 
-
-    def _draw_line_rel(self, pos1: Point, pos2: Point, width=2.5):
+    def _draw_line_rel(self, pos1: Point, pos2: Point, width=5):
         ctx = self._ctx
         ctx.set_line_width(width)
         ctx.rel_move_to(pos1.x, pos1.y)
         ctx.rel_line_to(pos2.x, pos2.y)
         ctx.stroke()
 
-    def _draw_circle(self, pos: Point, size):
+    def _draw_circle(self, pos: Point, size: float):
         ctx = self._ctx
 
         x, y = pos.x, pos.y
 
-        ctx.arc(x, y, size/2, 0, 2*pi)
+        ctx.arc(x, y, size / 2, 0, 2 * pi)
         ctx.fill()
 
+def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor) -> cairo.Surface:
+    """
 
+    :param dataset:
+    :param data_tensor: should be of shape `[n_intersections, n_features]`
+    :return:
+    """
+
+    drawer = _RoadPlotter(dataset.graph(), dataset.extract_vehicles_per_lane(data_tensor))
+    drawer.draw_all()
+    return drawer.get_surface()
 
 
 def main():
     roadnet_file = "sample-code/data/manhattan_16x3/roadnet_16_3.json"
     data_file = "generated_data/manhattan_16_3_data.json"
-
 
     data_set = LaneVehicleCountDataset.from_files(roadnet_file, data_file)
 
@@ -236,12 +252,11 @@ def main():
     n_intersections = 48
     n_intersections_per_row = 3
     n_intersections_per_height = math.ceil(n_intersections / n_intersections_per_row)
-    drawer = RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[600]))
+    drawer = _RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[604]))
 
     drawer.draw_all()
 
-
-    drawer.get_surface().write_to_png("test.png")
+    drawer.get_surface().write_to_png("results/test.png")
 
 
 if __name__ == '__main__':

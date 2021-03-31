@@ -79,6 +79,7 @@ class GNNVAEModel(nn.Module):
         :param calc_kl_div: Calculate kl div loss and return it if desired
         :return:
         """
+        assert x.dim() == 3
 
         x = self._gnn_encoder(x)
 

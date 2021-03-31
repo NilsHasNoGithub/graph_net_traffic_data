@@ -56,7 +56,7 @@ class VAENet(nn.Module):
         :return:
         """
         
-        # batch_size, *original_size = x.size()
+        batch_size, *original_size = x.size()
 
         enc_loc, enc_scale = self.encoder(x)
 
@@ -66,7 +66,7 @@ class VAENet(nn.Module):
 
         x = rsample_normal_distr(loc, scale)
 
-        # x = x.view(batch_size, *original_size)
+        x = x.view(batch_size, *original_size)
 
         if calc_kl_div:
             kl_loss = torch.log(1.0 / enc_scale) + (enc_scale ** 2.0 + enc_loc ** 2.0) / (2.0 * 1.0) - 0.5

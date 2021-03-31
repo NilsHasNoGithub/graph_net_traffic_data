@@ -18,8 +18,8 @@ def store_json(o: Union[dict, list], fp: AnyStr):
 
 @dataclass
 class Point:
-    x: int
-    y: int
+    x: Union[float, int]
+    y: Union[float, int]
 
     def __getitem__(self, item):
         if item == 0:
