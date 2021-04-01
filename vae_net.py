@@ -93,13 +93,13 @@ class VAENet(nn.Module):
         return self.decoder(x)
 
     def random_output(self, output_shape=None):
-        assert self.n_features == np.product(output_shape)
+        # assert self.n_features == np.product(output_shape)
 
-        loc = torch.zeros(self.n_hidden)
-        scale = torch.ones(self.n_hidden)
+        loc = torch.zeros(*output_shape)
+        scale = torch.ones(*output_shape)
 
         x = rsample_normal_distr(loc, scale)
-        x = x.view(1, -1)
+        # x = x.view(1, -1)
 
         loc, scale = self.decode(x)
 

@@ -58,6 +58,9 @@ def main():
 
     y = model(sample.view(1, *shape))
     y = y.view(*shape)
+
+    random_y = model.sample().view(*shape)
+
     #
     torch.set_printoptions(edgeitems=100000)
 
@@ -73,9 +76,11 @@ def main():
 
     input_data_im = gen_data_visualization(data_val, sample)
     output_data_im = gen_data_visualization(data_val, y)
+    random_data_im = gen_data_visualization(data_val, random_y)
 
     input_data_im.write_to_png("results/input.png")
     output_data_im.write_to_png("results/output.png")
+    random_data_im.write_to_png("results/random.png")
 
     # input_names = ['Original']
     # output_names = ['Reconstructed']

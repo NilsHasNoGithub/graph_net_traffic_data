@@ -244,6 +244,9 @@ def main():
     roadnet_file = "sample-code/data/manhattan_16x3/roadnet_16_3.json"
     data_file = "generated_data/manhattan_16_3_data.json"
 
+    data = load_json(data_file)
+
+
     data_set = LaneVehicleCountDataset.from_files(roadnet_file, data_file)
 
     graph = IntersectionGraph(roadnet_file)
@@ -252,7 +255,7 @@ def main():
     n_intersections = 48
     n_intersections_per_row = 3
     n_intersections_per_height = math.ceil(n_intersections / n_intersections_per_row)
-    drawer = _RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[604]))
+    drawer = _RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[2567]))
 
     drawer.draw_all()
 
