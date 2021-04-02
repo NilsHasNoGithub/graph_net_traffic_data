@@ -1,7 +1,7 @@
 import multiprocessing
 import cityflow
 from dataclasses import dataclass
-from typing import AnyStr, Dict
+from typing import AnyStr, Dict, List
 import argparse
 import pandas as pd
 import json
@@ -42,8 +42,14 @@ def collect_data(engine: cityflow.Engine, n_steps: int, reset_pre=True, reset_po
     if reset_post:
         engine.reset()
 
-    random.shuffle(data)
+
     return data
+
+def chunks(l, n) -> List[List]:
+    return [l[i:i+n] for i in range(0, len(l), n)]
+
+def flatten(l: List[List]) -> List:
+    return [item for sl in l for item in sl]
 
 def main(args: Args = None):
 
@@ -54,6 +60,9 @@ def main(args: Args = None):
 
     data = collect_data(engine, N_STEPS)
 
+    data = chunks(data, 10)
+    random.shuffle(data)
+    data = flatten(data)
     store_json(data, args.out_file)
 
 

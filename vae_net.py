@@ -46,7 +46,7 @@ class DistributionCfg:
         # view mean and variance seperately [batch_size, 2    , n_hidden]
         x = x.view(*dims, self.n_params, distr_params // self.n_params)
 
-        params = [x.index_select(n_dims - 1, torch.tensor([i]).to(x.device)).squeeze() for i in range(self.n_params)]
+        params = [x.index_select(n_dims - 1, torch.tensor([i]).to(x.device)).squeeze().view(*dims, -1) for i in range(self.n_params)]
         params = self.param_transfms(*params)
 
         return params
@@ -167,25 +167,58 @@ class VAENet(nn.Module):
 
 
 
-def extract_distr_params(x: Tensor):
-    """
-    # Parameters:
-    - `x` with input shape `[a, b*2]`
-    """
-    n_dims = len(x.size())
-    *dims, distr_params = x.size()
-    assert distr_params % 2 == 0, "There must be a mean and variance parameter for each feature"
+class VariationalLayer(nn.Module):
 
-    # view mean and variance seperately [batch_size, 2    , n_hidden]
-    x = x.view(*dims, 2, distr_params // 2)
+    def __init__(self, n_in: int, n_out: int, distr_cfg: Optional[DistributionCfg] = None):
+        nn.Module.__init__(self)
 
-    distr_param_idx = n_dims - 1
+        if distr_cfg is None:
+            distr_cfg = NORMAL_DISTR
 
-    loc = x.index_select(distr_param_idx, torch.tensor([0]).to(x.device)).squeeze()
-    scale = x.index_select(distr_param_idx, torch.tensor([1]).to(x.device)).squeeze()
+        self.distr_cfg = distr_cfg
 
-    scale = funct.softplus(scale)
-    scale = torch.add(scale, 0.00000001)
+        self.n_in = n_in
+        self.n_out = n_out
 
-    return loc, scale
+        self.linear = nn.Linear(n_in,  2*n_out)
 
+    def forward(self, x: Tensor):
+
+        x = self.linear(x)
+
+        return self.distr_cfg.extract_params_and_rsample(x)
+
+
+class VariationalEncoderLayer(nn.Module):
+
+    def __init__(self, n_in: int, n_out: int):
+        nn.Module.__init__(self)
+
+        self.n_in = n_in
+        self.n_out = n_out
+
+        self.linear = nn.Linear(n_in, 2 * n_out)
+
+    def forward(self, x: Tensor, calc_kl_div=False):
+
+        x = self.linear(x)
+
+        x, (loc, scale) = NORMAL_DISTR.extract_params_and_rsample(x, return_params=True)
+
+        if calc_kl_div:
+            kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / (2.0 * 1.0) - 0.5
+            kl_loss = torch.mean(kl_loss)
+            return x, kl_loss
+
+        return x
+
+    def random_output(self, output_shape, batch_size=1):
+
+        loc = torch.zeros(batch_size, *output_shape)
+        scale = torch.ones(batch_size, *output_shape)
+
+        x = rsample_normal_distr(loc, scale)
+
+        x = NORMAL_DISTR.extract_params_and_rsample(x)
+
+        return x
