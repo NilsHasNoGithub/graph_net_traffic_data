@@ -18,6 +18,7 @@ import time
 from utils import DEVICE
 from vae_net import VAEEncoderForwardResult
 
+from itertools import product as cart_product
 
 @dataclass
 class Args:
@@ -150,6 +151,13 @@ def categorical_loss_fn(output: GNNVAEForwardResult, targets: Tensor) -> Tensor:
         losses[:,:,:,i] = (targets - i) ** 2
 
     losses = probs * losses
+    # selected_losses = torch.zeros(targets.size(), device=targets.device, dtype=torch.float32)
+    #
+    #
+    # for i,j,k in cart_product(*(range(l) for l in targets.size())):
+    #     selected_losses[i,j,k] = losses[i,j,k,output.x[i,j,k]]
+
+    # selected_losses = torch.tensor(selected_losses)
     return torch.mean(losses)
 
 
