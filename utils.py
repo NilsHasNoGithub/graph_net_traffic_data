@@ -1,25 +1,36 @@
-import json
-from typing import AnyStr, Union
+import orjson
+import pickle
+from typing import AnyStr, Union, Any
 import torch
 from dataclasses import dataclass
 from math import sqrt
+from multiprocessing import cpu_count
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# DEVICE = torch.device("cpu")
+# DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+DEVICE = torch.device("cpu")
+# torch.set_num_threads(cpu_count())
 
 def load_json(fp: AnyStr) -> Union[dict, list]:
-    with open(fp, "r") as f:
-        return json.load(f)
+    with open(fp, "rb") as f:
+        return orjson.loads(f.read())
 
 def store_json(o: Union[dict, list], fp: AnyStr):
-    with open(fp, "w") as f:
-        json.dump(o, f)
+    with open(fp, "wb") as f:
+        f.write(orjson.dumps(o))
+
+def load_pkl(fp: AnyStr) -> Any:
+    with open(fp, "rb") as f:
+        return pickle.load(f)
+
+def store_pkl(item: Any, fp: AnyStr):
+    with open(fp, "wb") as f:
+        pickle.dump(item, f)
 
 @dataclass
 class Point:
-    x: int
-    y: int
+    x: Union[float, int]
+    y: Union[float, int]
 
     def __getitem__(self, item):
         if item == 0:

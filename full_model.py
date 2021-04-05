@@ -3,7 +3,7 @@ from typing import List
 import torch
 from torch import nn
 from gnn_model import IntersectionGNN
-from vae_net import VAENet
+from vae_net import VAENet, VariationalEncoderLayer, VariationalLayer, LOGNORMAL_DISTR
 from dataclasses import dataclass
 from typing import Any, Optional
 from torch.distributions.normal import Normal
@@ -49,9 +49,9 @@ class GNNVAEModel(nn.Module):
 
 
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
-        self._vae_net = VAENet(sizes[-1], n_hidden=n_hidden)
+        self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_hidden)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
-        self._to_out = nn.Linear(n_features, n_features)
+        self._variational_decoder = VariationalLayer(n_features, n_features, distr_cfg=LOGNORMAL_DISTR)
 
 
 
@@ -65,10 +65,10 @@ class GNNVAEModel(nn.Module):
 
     def sample(self):
 
-       x = self._vae_net.random_output([len(self._adj_list), int(self._n_features * (1/2))])
+       x = self._variational_encoder.random_output([len(self._adj_list), self._n_features])
 
        x = self._gnn_decoder(x)
-       x = self._to_out(x)
+       x = self._variational_decoder(x)
 
        return x
 
@@ -79,17 +79,18 @@ class GNNVAEModel(nn.Module):
         :param calc_kl_div: Calculate kl div loss and return it if desired
         :return:
         """
+        assert x.dim() == 3
 
         x = self._gnn_encoder(x)
 
         if calc_kl_div:
-            x, kl_loss = self._vae_net(x, calc_kl_div=True)
+            x, kl_loss = self._variational_encoder(x, calc_kl_div=True)
         else:
-            x = self._vae_net(x)
+            x = self._variational_encoder(x)
             kl_loss = None
 
         x = self._gnn_decoder(x)
-        x = self._to_out(x)
+        x = self._variational_decoder(x)
 
         if calc_kl_div:
             return x, kl_loss

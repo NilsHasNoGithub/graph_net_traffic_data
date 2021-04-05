@@ -80,7 +80,7 @@ class IntersectionGNN(nn.Module):
 
             for i_node, neighbors in enumerate(self._adj_list):
                 aggregated = self._agg(
-                    *[x[:, i_nb, :] for i_nb in neighbors]
+                    *(x[:, i_nb, :] for i_nb in neighbors)
                 )
 
                 h_i_node = x[:, i_node, :]

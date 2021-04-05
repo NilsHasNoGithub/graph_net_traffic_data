@@ -179,15 +179,16 @@ def main():
     if args.result_dir is not None:
         os.makedirs(args.result_dir, exist_ok=True)
 
-        fig, subplots = plt.subplots(2, 1, figsize=(10, 5))
+        fig = plt.figure(figsize=(10,5))
 
-        p0, p1 = subplots.flatten()
+        p = fig.gca()
 
-        p0.set_title("Train losses")
-        p0.plot(results.train_losses)
-
-        p1.set_title("Validation losses")
-        p1.plot(results.val_losses)
+        p.set_title("Losses: combination of MSE loss and Kullback Leibler divergence")
+        p.plot(results.train_losses, label="train loss")
+        p.plot(results.val_losses, label="validation loss")
+        p.set_xlabel("$i$th epoch")
+        p.set_ylabel("Loss")
+        p.legend()
 
         fig.tight_layout()
         fig.savefig(os.path.join(args.result_dir, "losses.png"))
