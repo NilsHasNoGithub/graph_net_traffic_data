@@ -8,14 +8,16 @@ from torch.optim import Optimizer
 
 from load_data import LaneVehicleCountDataset
 from torch.utils.data import DataLoader
-from torch import nn
+from torch import nn, Tensor
 
 from gnn_model import IntersectionGNN
-from full_model import GNNVAEModel
+from full_model import GNNVAEModel, GNNVAEForwardResult
 import matplotlib.pyplot as plt
 import time
 
 from utils import DEVICE
+from vae_net import VAEEncoderForwardResult
+
 
 @dataclass
 class Args:
@@ -94,8 +96,8 @@ def train(
 
             optimizer.zero_grad()
 
-            predicted, kl_div_loss = model(inputs, calc_kl_div=True)
-            loss = loss_fn_weight * loss_fn(predicted, targets) + kl_div_loss
+            output: VAEEncoderForwardResult = model(inputs)
+            loss = loss_fn_weight * loss_fn(output, targets) + output.kl_div
             loss.backward()
 
             optimizer.step()
@@ -113,8 +115,8 @@ def train(
                 inputs = inputs.to(device)
                 targets = inputs.clone().detach()
 
-                predicted, kl_div_loss = model(inputs, calc_kl_div=True)
-                loss = loss_fn_weight * loss_fn(predicted, targets) + kl_div_loss
+                output: VAEEncoderForwardResult = model(inputs)
+                loss = loss_fn_weight * loss_fn(output, targets) + output.kl_div
 
                 cur_val_loss += loss.item()
 
@@ -140,6 +142,16 @@ def train(
         val_losses
     )
 
+def categorical_loss_fn(output: GNNVAEForwardResult, targets: Tensor) -> Tensor:
+    probs = output.params[0]
+    losses: Tensor = torch.zeros(*probs.size(), dtype=torch.float32).to(targets.device)
+
+    for i in range(probs.size()[-1]):
+        losses[:,:,:,i] = (targets - i) ** 2
+
+    losses = probs * losses
+    return torch.mean(losses)
+
 
 def main():
     args = parse_args()
@@ -158,7 +170,7 @@ def main():
     else:
         model = GNNVAEModel(data_train.sample_shape()[1], data_train.graph_adjacency_list())
 
-    loss_fn = nn.MSELoss()
+    loss_fn = categorical_loss_fn
     optimizer = torch.optim.Adam(model.parameters())
 
     results = train(

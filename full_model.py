@@ -3,7 +3,8 @@ from typing import List
 import torch
 from torch import nn
 from gnn_model import IntersectionGNN
-from vae_net import VAENet, VariationalEncoderLayer, VariationalLayer, LOGNORMAL_DISTR
+from vae_net import VAENet, VariationalEncoderLayer, VariationalLayer, LOGNORMAL_DISTR, categorical_distr, \
+    VAEEncoderForwardResult, VAEDecoderForwardResult
 from dataclasses import dataclass
 from typing import Any, Optional
 from torch.distributions.normal import Normal
@@ -14,6 +15,8 @@ class GNNVAEModelState:
     n_features: int
     adj_list: List[List[int]]
     n_hidden: int
+
+GNNVAEForwardResult = VAEEncoderForwardResult
 
 class GNNVAEModel(nn.Module):
 
@@ -51,7 +54,7 @@ class GNNVAEModel(nn.Module):
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
         self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_hidden)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
-        self._variational_decoder = VariationalLayer(n_features, n_features, distr_cfg=LOGNORMAL_DISTR)
+        self._variational_decoder = VariationalLayer(n_features, n_features, distr_cfg=categorical_distr(30))
 
 
 
@@ -68,11 +71,11 @@ class GNNVAEModel(nn.Module):
        x = self._variational_encoder.random_output([len(self._adj_list), self._n_features])
 
        x = self._gnn_decoder(x)
-       x = self._variational_decoder(x)
+       x: VAEDecoderForwardResult = self._variational_decoder(x)
 
-       return x
+       return x.x
 
-    def forward(self, x: torch.Tensor, calc_kl_div=False):
+    def forward(self, x: torch.Tensor) -> GNNVAEForwardResult:
         """
 
         :param x:
@@ -83,16 +86,9 @@ class GNNVAEModel(nn.Module):
 
         x = self._gnn_encoder(x)
 
-        if calc_kl_div:
-            x, kl_loss = self._variational_encoder(x, calc_kl_div=True)
-        else:
-            x = self._variational_encoder(x)
-            kl_loss = None
+        encoder_result: VAEEncoderForwardResult = self._variational_encoder(x)
 
-        x = self._gnn_decoder(x)
-        x = self._variational_decoder(x)
+        x = self._gnn_decoder(encoder_result.x)
+        decoder_result: VAEDecoderForwardResult = self._variational_decoder(x)
 
-        if calc_kl_div:
-            return x, kl_loss
-
-        return x
+        return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, decoder_result.params)

@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as funct
 from torch.tensor import Tensor
-from torch.distributions import Distribution
+from torch.distributions import Distribution, Categorical
 from torch.distributions.normal import Normal
 from torch.distributions.log_normal import LogNormal
 import numpy as np
@@ -19,6 +19,7 @@ def rsample_log_normal_distr(loc, scale) -> Tensor:
     return distr.rsample()
 
 
+
 @dataclass
 class DistributionCfg:
     n_params: int
@@ -26,12 +27,10 @@ class DistributionCfg:
     param_transfms: Callable[[Tensor, ...], List[Tensor]]
 
 
-    def rsample(self, *params) -> Tensor:
-        if len(params) != self.n_params:
-            raise ValueError("Incorrect amount of parameters")
-
+    def try_rsample(self, *params) -> Tensor:
         distr = self.constructor(*params)
-
+        if not distr.has_rsample:
+            return distr.sample()
         return distr.rsample()
 
     def extract_params(self, x: Tensor) -> List[Tensor]:
@@ -51,13 +50,15 @@ class DistributionCfg:
 
         return params
 
-    def extract_params_and_rsample(self, x: Tensor, return_params=False) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+    def extract_params_and_sample(self, x: Tensor, return_params=False) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         """
             # Parameters:
             - `x` with input shape `[a, b*2]`
             """
         params = self.extract_params(x)
-        samples = self.rsample(*params)
+
+        samples = self.try_rsample(*params)
+
         if return_params:
             return samples, params
         return samples
@@ -70,9 +71,18 @@ def _normal_param_transform(loc, scale):
 
     return [loc, scale]
 
+def _categorical_param_transform(*params):
+    # params: [batch_size, n_neighbors, n_features] * n_categories -> [batch_size, n_neighbors, n_features, n_categories]
+    params = torch.stack(params, dim=-1)
+    params = funct.softmax(params, dim=-1)
+    return [params]
+
+
 NORMAL_DISTR = DistributionCfg(2, Normal, _normal_param_transform)
 LOGNORMAL_DISTR = DistributionCfg(2, LogNormal, _normal_param_transform)
 
+def categorical_distr(n_categories: int) -> DistributionCfg:
+    return DistributionCfg(n_categories, Categorical, _categorical_param_transform)
 
 @dataclass
 class VAENetData:
@@ -80,6 +90,17 @@ class VAENetData:
     n_hidden: int
     distr_cfg: DistributionCfg
     state_dict: Any
+
+@dataclass
+class VAEEncoderForwardResult:
+    x: Tensor
+    kl_div: Tensor
+    params: List[Tensor]
+
+@dataclass
+class VAEDecoderForwardResult:
+    x: Tensor
+    params: List[Tensor]
 
 class VAENet(nn.Module):
 
@@ -121,7 +142,7 @@ class VAENet(nn.Module):
             self.state_dict()
         )
 
-    def forward(self, x: Tensor, calc_kl_div=False):
+    def forward(self, x: Tensor) -> VAEEncoderForwardResult:
         """
 
         :param x:
@@ -133,20 +154,18 @@ class VAENet(nn.Module):
 
         x = self.to_hidden(x)
 
-        x, (enc_loc, enc_scale) = NORMAL_DISTR.extract_params_and_rsample(x, return_params=True)
+        x, (enc_loc, enc_scale) = NORMAL_DISTR.extract_params_and_sample(x, return_params=True)
 
         x = self.from_hidden(x)
 
-        x = self.distr_cfg.extract_params_and_rsample(x)
+        x, params = self.distr_cfg.extract_params_and_sample(x, return_params=True)
 
         x = x.view(batch_size, *original_size)
 
-        if calc_kl_div:
-            kl_loss = torch.log(1.0 / enc_scale) + (enc_scale ** 2.0 + enc_loc ** 2.0) / (2.0 * 1.0) - 0.5
-            kl_loss = torch.mean(kl_loss)
-            return x, kl_loss
+        kl_div = torch.log(1.0 / enc_scale) + (enc_scale ** 2.0 + enc_loc ** 2.0) / (2.0 * 1.0) - 0.5
+        kl_div = torch.mean(kl_div)
 
-        return x
+        return VAEEncoderForwardResult(x, kl_div, params)
 
 
     def random_output(self, output_shape=None):
@@ -158,7 +177,7 @@ class VAENet(nn.Module):
         x = rsample_normal_distr(loc, scale)
         # x = x.view(1, -1)
 
-        x = self.distr_cfg.extract_params_and_rsample(x)
+        x = self.distr_cfg.extract_params_and_sample(x)
 
         if output_shape is None:
             return x
@@ -180,13 +199,15 @@ class VariationalLayer(nn.Module):
         self.n_in = n_in
         self.n_out = n_out
 
-        self.linear = nn.Linear(n_in,  2*n_out)
+        self.linear = nn.Linear(n_in,  distr_cfg.n_params * n_out)
 
     def forward(self, x: Tensor):
 
         x = self.linear(x)
 
-        return self.distr_cfg.extract_params_and_rsample(x)
+        x, params = self.distr_cfg.extract_params_and_sample(x, return_params=True)
+
+        return VAEDecoderForwardResult(x, params)
 
 
 class VariationalEncoderLayer(nn.Module):
@@ -199,18 +220,16 @@ class VariationalEncoderLayer(nn.Module):
 
         self.linear = nn.Linear(n_in, 2 * n_out)
 
-    def forward(self, x: Tensor, calc_kl_div=False):
+    def forward(self, x: Tensor):
 
         x = self.linear(x)
 
-        x, (loc, scale) = NORMAL_DISTR.extract_params_and_rsample(x, return_params=True)
+        x, (loc, scale) = NORMAL_DISTR.extract_params_and_sample(x, return_params=True)
 
-        if calc_kl_div:
-            kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / (2.0 * 1.0) - 0.5
-            kl_loss = torch.mean(kl_loss)
-            return x, kl_loss
+        kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / (2.0 * 1.0) - 0.5
+        kl_loss = torch.mean(kl_loss)
 
-        return x
+        return VAEEncoderForwardResult(x, kl_loss, [loc, scale])
 
     def random_output(self, output_shape, batch_size=1):
 
@@ -219,6 +238,6 @@ class VariationalEncoderLayer(nn.Module):
 
         x = rsample_normal_distr(loc, scale)
 
-        x = NORMAL_DISTR.extract_params_and_rsample(x)
+        x = NORMAL_DISTR.extract_params_and_sample(x)
 
         return x

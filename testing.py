@@ -57,6 +57,7 @@ def main():
     shape = data_val.sample_shape()
 
     y = model(sample.view(1, *shape))
+    y = y.x
     y = y.view(*shape)
 
     random_y = model.sample().view(*shape)

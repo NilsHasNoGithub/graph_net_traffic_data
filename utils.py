@@ -7,8 +7,8 @@ from math import sqrt
 from multiprocessing import cpu_count
 
 # DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 DEVICE = torch.device("cpu")
+
 # torch.set_num_threads(cpu_count())
 
 def load_json(fp: AnyStr) -> Union[dict, list]:
