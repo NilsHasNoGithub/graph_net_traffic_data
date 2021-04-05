@@ -25,6 +25,9 @@ class Road:
     def length(self):
         return self.start.distance(self.end)
 
+    def middle(self):
+        return (self.start + self.end) / 2
+
 
 @dataclass
 class Intersection:
@@ -227,3 +230,5 @@ if __name__ == '__main__':
         print(l)
 
     print(i)
+
+

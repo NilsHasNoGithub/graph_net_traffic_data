@@ -32,6 +32,15 @@ class Point:
     x: Union[float, int]
     y: Union[float, int]
 
+    @staticmethod
+    def _parse_type(other) -> 'Point':
+        if isinstance(other, Point):
+            return other
+        elif isinstance(other, float) or isinstance(other, int):
+            return Point(other, other)
+
+        raise ValueError()
+
     def __getitem__(self, item):
         if item == 0:
             return self.x
@@ -41,8 +50,7 @@ class Point:
         raise ValueError("index must be 1 or 0")
 
     def __add__(self, other):
-        if not isinstance(other, Point):
-            raise ValueError()
+        other = Point._parse_type(other)
 
         return Point(
             self.x + other.x,
@@ -50,12 +58,19 @@ class Point:
         )
 
     def __sub__(self, other):
-        if not isinstance(other, Point):
-            raise ValueError()
+        other = Point._parse_type(other)
 
         return Point(
             self.x - other.x,
             self.y - other.y
+        )
+
+    def __truediv__(self, other):
+        other = Point._parse_type(other)
+
+        return Point(
+            self.x / other.x,
+            self.y / other.y
         )
 
     def __iter__(self):
