@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-from typing import List, Dict, Iterator, AnyStr, Any, Tuple
+from typing import List, Dict, Iterator, AnyStr, Any, Tuple, Set
 from roadnet_graph import RoadnetGraph, Intersection
 from utils import load_json
 
@@ -215,6 +215,12 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             inputs.append([1.0 if intersection_data.is_missing else 0.0] + counts)
 
         return inputs, self.get_feature_vecs(t % len(self._data))
+
+    def get_no_data_intersections(self, t: int) -> Set[str]:
+        data_t = self._data_hidden[t]
+        result = {i_id for (i_id, i_data) in data_t.items() if i_data.is_missing}
+
+        return result
 
     def __len__(self):
         return len(self._data_hidden)

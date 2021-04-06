@@ -25,6 +25,7 @@ class Args:
     result_dir: Optional[str]
     n_epochs: int
     batch_size: int
+    p_missing: float
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -34,6 +35,7 @@ def parse_args():
     parser.add_argument("--result-dir", "-R", type=str)
     parser.add_argument("--n-epochs", "-n", type=int, default=100)
     parser.add_argument("--batch-size", "-b", type=int, default=50)
+    parser.add_argument("--p-missing", "-p", type=float, default=0.3)
 
     parsed = parser.parse_args()
 
@@ -44,6 +46,7 @@ def parse_args():
         parsed.result_dir,
         parsed.n_epochs,
         parsed.batch_size,
+        parsed.p_missing
     )
 
 @dataclass
@@ -146,7 +149,7 @@ def main():
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=0.5)
+    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, enhance_factor=10)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)

@@ -1,12 +1,13 @@
 from typing import List
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 from gnn_model import IntersectionGNN
 from vae_net import VAENet, VariationalEncoderLayer, VariationalLayer, LOGNORMAL_DISTR
 from dataclasses import dataclass
 from typing import Any, Optional
 from torch.distributions.normal import Normal
+from torch_geometric.data import Batch, Data
 
 @dataclass
 class GNNVAEModelState:
@@ -37,6 +38,13 @@ class GNNVAEModel(nn.Module):
 
         n_intersetions = len(adj_list)
 
+        edges = []
+        for i_from, tos in enumerate(adj_list):
+            for i_to in tos:
+                edges.append([i_from, i_to])
+
+        self._edges = torch.tensor(edges).transpose(0,1)
+
         if n_out is None:
             n_out = n_features
 
@@ -57,7 +65,9 @@ class GNNVAEModel(nn.Module):
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
         self._variational_decoder = VariationalLayer(n_features, n_out, distr_cfg=LOGNORMAL_DISTR)
 
-
+    def _tensor_to_batch(self, x: Tensor) -> Batch:
+        # x: [batch_size, n_intersections, n_features]
+        ...
 
     def get_model_state(self) -> GNNVAEModelState:
         return GNNVAEModelState(
@@ -70,7 +80,7 @@ class GNNVAEModel(nn.Module):
 
     def sample(self):
 
-       x = self._variational_encoder.random_output([len(self._adj_list), self._n_features])
+       x = self._variational_encoder.random_output([len(self._adj_list), self._n_out])
 
        x = self._gnn_decoder(x)
        x = self._variational_decoder(x)
