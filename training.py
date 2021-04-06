@@ -7,7 +7,7 @@ import torch
 from torch.optim import Optimizer
 
 from load_data import LaneVehicleCountDataset
-from torch.utils.data import DataLoader
+from torch_geometric.data import DataLoader
 from torch import nn
 
 from gnn_model import IntersectionGNN
@@ -90,12 +90,12 @@ def train(
         for i, inputs in enumerate(train_dl):
 
             inputs = inputs.to(device)
-            targets = inputs.clone().detach()
+            targets = inputs.clone() #.detach()
 
             optimizer.zero_grad()
 
-            predicted, kl_div_loss = model(inputs, calc_kl_div=True)
-            loss = loss_fn_weight * loss_fn(predicted, targets) + kl_div_loss
+            predicted, kl_div_loss = model(inputs.x, inputs.edge_index, calc_kl_div=True)
+            loss = loss_fn_weight * loss_fn(predicted, targets.x) + kl_div_loss
             loss.backward()
 
             optimizer.step()
@@ -111,10 +111,10 @@ def train(
         with torch.no_grad():
             for i, inputs in enumerate(val_dl):
                 inputs = inputs.to(device)
-                targets = inputs.clone().detach()
+                targets = inputs.clone()
 
-                predicted, kl_div_loss = model(inputs, calc_kl_div=True)
-                loss = loss_fn_weight * loss_fn(predicted, targets) + kl_div_loss
+                predicted, kl_div_loss = model(inputs.x, inputs.edge_index, calc_kl_div=True)
+                loss = loss_fn_weight * loss_fn(predicted, targets.x) + kl_div_loss
 
                 cur_val_loss += loss.item()
 
@@ -148,8 +148,8 @@ def main():
 
     data_train, data_test = LaneVehicleCountDataset.train_test_from_files(args.roadnet_file, args.data_file)
 
-    train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
-    val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)
+    train_dl = DataLoader(data_train.get_geometric_datasets(), batch_size=args.batch_size, shuffle=True)
+    val_dl = DataLoader(data_test.get_geometric_datasets(), batch_size=args.batch_size, shuffle=True)
 
 
     if args.model_file is not None and os.path.isfile(args.model_file):

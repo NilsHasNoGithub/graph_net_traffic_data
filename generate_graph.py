@@ -191,6 +191,20 @@ class IntersectionGraph:
 
         return result
 
+    def idx_graph_connectivity(self) -> List[List[int]]:
+        """
+        Graph connectivity in COO format.
+        """
+        senders = []
+        receivers = []
+
+        for intersection in self._intersection_list:
+            for nb in self.adj_dict[intersection]:
+                senders.append(self._intersection_to_idx[intersection])
+                receivers.append(self._intersection_to_idx[nb])
+
+        return [senders, receivers]
+
 if __name__ == '__main__':
     data = load_json("generated_data/manhattan_16_3_data.json")
 

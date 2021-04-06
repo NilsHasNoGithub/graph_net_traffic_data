@@ -5,6 +5,7 @@ import argparse
 import os
 import torch
 from torch.optim import Optimizer
+from torch_geometric.data import Data
 
 from load_data import LaneVehicleCountDataset
 from torch.utils.data import DataLoader
@@ -54,12 +55,14 @@ def main():
     loss_fn = nn.MSELoss()
 
     sample = data_val[500]
+    sample_geo = data_val.get_geometric_datasets()
+    sample_edge_index = sample_geo[500].edge_index
     shape = data_val.sample_shape()
 
-    y = model(sample.view(1, *shape))
+    y = model(sample.view(1, *shape), sample_edge_index)
     y = y.view(*shape)
 
-    random_y = model.sample().view(*shape)
+    random_y = model.sample(sample_edge_index).view(*shape)
 
     #
     torch.set_printoptions(edgeitems=100000)

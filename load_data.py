@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 from typing import List, Dict, Iterator, AnyStr
 from generate_graph import IntersectionGraph, Intersection
 from utils import load_json
+import torch_geometric
 
 class LaneVehicleCountDataset(Dataset):
 
@@ -36,6 +37,9 @@ class LaneVehicleCountDataset(Dataset):
 
     def graph_adjacency_list(self) -> List[List[int]]:
         return self._graph.idx_adjacency_lists()
+
+    def graph_connectivity(self) -> List[List[int]]:
+        return self._graph.idx_graph_connectivity()
 
     def feature_vecs_iter(self) -> Iterator[List[List[float]]]:
         for counts_dict in self._data:
@@ -83,6 +87,15 @@ class LaneVehicleCountDataset(Dataset):
 
         return result
 
+    def get_geometric_datasets(self) -> List[torch_geometric.data.Data]:
+        graph_datasets = []
+        graph_connectivity = torch.tensor(self.graph_connectivity())
+
+        for timestep in range(len(self._data)):
+            data = torch.tensor(self.get_feature_vecs(timestep))
+            graph_datasets.append(torch_geometric.data.Data(x=data, edge_index=graph_connectivity))
+
+        return graph_datasets
 
     def __len__(self):
         return len(self._data)
@@ -102,3 +115,4 @@ if __name__ == "__main__":
 
     print(data_train.extract_vehicles_per_lane(a))
     print(data_train.get_feature_dict(t))
+    print(data_train.get_geometric_datasets()[0])
