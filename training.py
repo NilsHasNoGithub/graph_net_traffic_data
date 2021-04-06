@@ -6,7 +6,7 @@ import os
 import torch
 from torch.optim import Optimizer
 
-from load_data import LaneVehicleCountDataset
+from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing
 from torch.utils.data import DataLoader
 from torch import nn
 
@@ -87,10 +87,10 @@ def train(
 
         t = time.time()
 
-        for i, inputs in enumerate(train_dl):
+        for i, (inputs, targets) in enumerate(train_dl):
 
             inputs = inputs.to(device)
-            targets = inputs.clone().detach()
+            targets = targets.to(device)
 
             optimizer.zero_grad()
 
@@ -109,9 +109,9 @@ def train(
             t = t1
 
         with torch.no_grad():
-            for i, inputs in enumerate(val_dl):
+            for i, (inputs, targets) in enumerate(val_dl):
                 inputs = inputs.to(device)
-                targets = inputs.clone().detach()
+                targets = targets.to(device)
 
                 predicted, kl_div_loss = model(inputs, calc_kl_div=True)
                 loss = loss_fn_weight * loss_fn(predicted, targets) + kl_div_loss
@@ -146,7 +146,7 @@ def main():
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    data_train, data_test = LaneVehicleCountDataset.train_test_from_files(args.roadnet_file, args.data_file)
+    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=0.5)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)
@@ -156,7 +156,7 @@ def main():
         state = torch.load(args.model_file)
         model = GNNVAEModel.from_model_state(state)
     else:
-        model = GNNVAEModel(data_train.sample_shape()[1], data_train.graph_adjacency_list())
+        model = GNNVAEModel(data_train.input_shape()[1], data_train.graph_adjacency_list(), n_out=data_train.output_shape()[1])
 
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())

@@ -1,9 +1,10 @@
 import random
+from dataclasses import dataclass
 
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-from typing import List, Dict, Iterator, AnyStr, Any
+from typing import List, Dict, Iterator, AnyStr, Any, Tuple
 from roadnet_graph import RoadnetGraph, Intersection
 from utils import load_json
 
@@ -99,11 +100,11 @@ class LaneVehicleCountDataset(Dataset):
         result = []
 
         for intersection in self._graph.intersection_list():
+            intersection_data = self._data[t][intersection.id]
 
-            counts_incoming = [self._data[t][intersection.id][lane_id] for lane_id in intersection.incoming_lanes]
-            counts_outgoing = [self._data[t][intersection.id][lane_id] for lane_id in intersection.outgoing_lanes]
+            counts = [intersection_data[lane_id] for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes]
 
-            result.append(counts_incoming + counts_outgoing)
+            result.append(counts)
 
         return result
 
@@ -145,11 +146,90 @@ class LaneVehicleCountDataset(Dataset):
         feature_vecs = self.get_feature_vecs(idx)
         return torch.tensor(feature_vecs, dtype=torch.float32)
 
+@dataclass
+class TimeStepDataMissing:
+    is_missing: bool
+    data: Dict
+
+class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
+
+    @staticmethod
+    def train_test_from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, **kwargs):
+        return (
+            LaneVehicleCountDatasetMissing.from_files(roadnet_file, lane_data_file, train=True, **kwargs),
+            LaneVehicleCountDatasetMissing.from_files(roadnet_file, lane_data_file, train=False, **kwargs)
+        )
+
+    @staticmethod
+    def from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, **kwargs) -> "LaneVehicleCountDataset":
+        data = load_json(lane_data_file)
+        graph = RoadnetGraph(roadnet_file)
+
+        return LaneVehicleCountDatasetMissing(graph, data, **kwargs)
+
+    @staticmethod
+    def _generate_missing_sensor_data(data: List, graph: RoadnetGraph, p_missing: float, enhance_factor: int) -> List:
+        intersections = graph.intersection_list()
+
+        result = []
+
+        for _ in range(enhance_factor):
+
+            for data_t in data:
+                new_data_t = {}
+                for intersection in intersections:
+                    data_t_i = data_t[intersection.id]
+                    is_missing = random.random() < p_missing
+
+                    if is_missing:
+                        intersection_data = {lane_id:0.0 for lane_id in data_t_i.keys()}
+                    else:
+                        intersection_data = data_t_i
+
+                    new_data_t[intersection.id] = TimeStepDataMissing(is_missing, intersection_data)
+
+                result.append(new_data_t)
+
+        return result
+
+    def input_shape(self) -> torch.Size:
+        return self[0][0].shape
+
+    def output_shape(self) -> torch.Size:
+        return self[0][1].shape
+
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=10, p_missing=0.2, enhance_factor=5):
+        LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
+
+        self._data_hidden = LaneVehicleCountDatasetMissing._generate_missing_sensor_data(self._data, graph, p_missing, enhance_factor)
+
+    def get_feature_vecs_hidden(self, t: int) -> Tuple[List[List[float]], List[List[float]]]:
+        inputs = []
+
+        for intersection in self._graph.intersection_list():
+            intersection_data = self._data_hidden[t][intersection.id]
+
+            counts = [intersection_data.data[lane_id] for lane_id in
+                      intersection.incoming_lanes + intersection.outgoing_lanes]
+
+            inputs.append([1.0 if intersection_data.is_missing else 0.0] + counts)
+
+        return inputs, self.get_feature_vecs(t % len(self._data))
+
+    def __len__(self):
+        return len(self._data_hidden)
+
+    def __getitem__(self, item):
+        inputs, targets = self.get_feature_vecs_hidden(item)
+
+        return torch.tensor(inputs), torch.tensor(targets)
+
 
 if __name__ == "__main__":
     roadnet_file = "sample-code/data/manhattan_16x3/roadnet_16_3.json"
     data_file = "generated_data/manhattan_16_3_data.json"
     data_train, data_val = LaneVehicleCountDataset.train_test_from_files(roadnet_file, data_file)
+    data_train_m, data_val_m = LaneVehicleCountDatasetMissing.train_test_from_files(roadnet_file, data_file)
 
     t = 600
     a = data_train[t]
@@ -157,5 +237,11 @@ if __name__ == "__main__":
     feat_dict_original = data_train.get_feature_dict(t)
     feat_dict_processed = data_train.extract_vehicles_per_lane(a)
     assert feat_dict_processed == feat_dict_original
+
+    a,b = data_train_m[t]
+
+    for i in range(a.shape[0]):
+        if a[i, 0] == 0:
+            assert torch.all(a[i,1:] == b[i,:])
 
 

@@ -49,7 +49,22 @@ class Intersection:
     def __lt__(self, other):
         return self.id < other.id
 
+@dataclass
+class _RoadSort:
+    road: Road
 
+    def __lt__(self, other):
+        assert isinstance(other, _RoadSort)
+        middle_self = self.road.middle()
+        middle_other = other.road.middle()
+
+        key_self = middle_self.x + middle_self.y
+        key_other = middle_other.x + middle_other.y
+
+        if key_self != key_other:
+            return key_self < key_other
+
+        return middle_self.x < middle_other.x
 
 class RoadnetGraph:
 
@@ -91,10 +106,10 @@ class RoadnetGraph:
                 incoming_lanes = []
                 outgoing_lanes = []
 
-                for road_id in intersection_dict["roads"]:
+                roads = (_RoadSort(road_map[road_id]) for road_id in intersection_dict["roads"])
+                roads = (r.road for r in sorted(roads))
 
-
-                    road = road_map[road_id]
+                for road in roads:
 
                     lane_ids = road.lanes
 
