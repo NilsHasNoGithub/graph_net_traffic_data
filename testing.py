@@ -58,8 +58,7 @@ def main():
 
     loss_fn = nn.MSELoss()
 
-    sample, target = data_val[t]
-    hidden_intersections = data_val.get_no_data_intersections(t)
+    sample, target, hidden_intersections = data_val.get_item(t, return_hidden_intersections=True)
     input_shape = data_val.input_shape()
     output_shape = data_val.output_shape()
 

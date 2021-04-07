@@ -149,7 +149,9 @@ def main():
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, enhance_factor=10)
+    distr = torch.distributions.Beta(1.575, 3.675)
+
+    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=distr)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)

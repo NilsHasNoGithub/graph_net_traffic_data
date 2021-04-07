@@ -4,7 +4,8 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-from typing import List, Dict, Iterator, AnyStr, Any, Tuple, Set
+from torch.distributions.distribution import  Distribution
+from typing import List, Dict, Iterator, AnyStr, Any, Tuple, Set, Optional, Union
 from roadnet_graph import RoadnetGraph, Intersection
 from utils import load_json
 
@@ -67,12 +68,13 @@ class LaneVehicleCountDataset(Dataset):
         assert len(data) > 5, "data should contain at least 5 elements"
         i_split = int(0.8*len(data))
 
+        data = data[:i_split] if train else data[i_split:]
+
         if shuffle:
             data = chunks(data, shuffle_chunk_size)
             random.shuffle(data)
             data = flatten(data)
 
-        data = data[:i_split] if train else data[i_split:]
         self._data = LaneVehicleCountDataset._data_pre_process(graph, data)
         self._graph = graph
 
@@ -171,29 +173,24 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
         return LaneVehicleCountDatasetMissing(graph, data, **kwargs)
 
     @staticmethod
-    def _generate_missing_sensor_data(data: List, graph: RoadnetGraph, p_missing: float, enhance_factor: int) -> List:
+    def _generate_missing_sensor_data(data_t: dict, graph: RoadnetGraph, p_missing: float) -> Dict:
         intersections = graph.intersection_list()
 
-        result = []
+        new_data_t = {}
+        for intersection in intersections:
+            data_t_i = data_t[intersection.id]
+            is_missing = random.random() < p_missing
 
-        for _ in range(enhance_factor):
+            if is_missing:
+                intersection_data = {lane_id:0.0 for lane_id in data_t_i.keys()}
+            else:
+                intersection_data = data_t_i
 
-            for data_t in data:
-                new_data_t = {}
-                for intersection in intersections:
-                    data_t_i = data_t[intersection.id]
-                    is_missing = random.random() < p_missing
+            new_data_t[intersection.id] = TimeStepDataMissing(is_missing, intersection_data)
 
-                    if is_missing:
-                        intersection_data = {lane_id:0.0 for lane_id in data_t_i.keys()}
-                    else:
-                        intersection_data = data_t_i
+        return new_data_t
 
-                    new_data_t[intersection.id] = TimeStepDataMissing(is_missing, intersection_data)
 
-                result.append(new_data_t)
-
-        return result
 
     def input_shape(self) -> torch.Size:
         return self[0][0].shape
@@ -201,37 +198,62 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def output_shape(self) -> torch.Size:
         return self[0][1].shape
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing=0.2, enhance_factor=5):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution]]=None):
         LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
 
-        self._data_hidden = LaneVehicleCountDatasetMissing._generate_missing_sensor_data(self._data, graph, p_missing, enhance_factor)
+        if p_missing is None:
+            p_missing = 0.2
 
-    def get_feature_vecs_hidden(self, t: int) -> Tuple[List[List[float]], List[List[float]]]:
+        self._p_missing = p_missing
+
+
+    def get_feature_vecs_hidden(self, t: int, return_hidden_intersections=False) -> Any:
         inputs = []
 
+        if issubclass(type(self._p_missing), Distribution):
+            p_missing = self._p_missing.sample(sample_shape=[1]).item()
+        else:
+            p_missing = self._p_missing
+
+        assert isinstance(p_missing, float)
+
+        data_t = LaneVehicleCountDatasetMissing._generate_missing_sensor_data(self._data[t], self._graph, p_missing)
+
         for intersection in self._graph.intersection_list():
-            intersection_data = self._data_hidden[t][intersection.id]
+            intersection_data = data_t[intersection.id]
 
             counts = [intersection_data.data[lane_id] for lane_id in
                       intersection.incoming_lanes + intersection.outgoing_lanes]
 
             inputs.append([1.0 if intersection_data.is_missing else 0.0] + counts)
 
-        return inputs, self.get_feature_vecs(t % len(self._data))
+        if return_hidden_intersections:
+            hidden_intersections = {i_id for (i_id, i_data) in data_t.items() if i_data.is_missing}
+            return inputs, self.get_feature_vecs(t), hidden_intersections
 
-    def get_no_data_intersections(self, t: int) -> Set[str]:
-        data_t = self._data_hidden[t]
-        result = {i_id for (i_id, i_data) in data_t.items() if i_data.is_missing}
+        #TODO return hidden intersections
+        return inputs, self.get_feature_vecs(t)
 
-        return result
+    # def get_no_data_intersections(self, t: int) -> Set[str]:
+    #     data_t = self._data_hidden[t]
+    #     result = {i_id for (i_id, i_data) in data_t.items() if i_data.is_missing}
+
+    #     return result
 
     def __len__(self):
-        return len(self._data_hidden)
+        return len(self._data)
+
+    def get_item(self, item, return_hidden_intersections=False):
+        result = list(self.get_feature_vecs_hidden(item, return_hidden_intersections=return_hidden_intersections))
+
+        for i in range(2):
+            result[i] = torch.tensor(result[i])
+
+        return tuple(result)
 
     def __getitem__(self, item):
-        inputs, targets = self.get_feature_vecs_hidden(item)
 
-        return torch.tensor(inputs), torch.tensor(targets)
+        return self.get_item(item)
 
 
 if __name__ == "__main__":
