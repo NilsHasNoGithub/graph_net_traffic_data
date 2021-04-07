@@ -1,6 +1,6 @@
 import math
 from copy import deepcopy
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Tuple, Set, Optional
 
 import cairo
 from cairo import Context as CContext
@@ -11,7 +11,6 @@ from utils import load_json
 
 from load_data import LaneVehicleCountDataset
 from math import sqrt, asin, pi, atan
-
 
 class _RoadPlotter:
 
@@ -66,6 +65,7 @@ class _RoadPlotter:
             self,
             graph: RoadnetGraph,
             data: Dict[str, float],
+            no_data_intersections: Optional[Set[str]] = None,
             intersection_size=55,
             padding=30,
             legend_width=100,
@@ -94,6 +94,7 @@ class _RoadPlotter:
         self._ctx = cairo.Context(self._surface)
         self._data = data
         self._graph = graph
+        self._no_data_intersections = set() if no_data_intersections is None else no_data_intersections
         self._intersection_size = intersection_size
         self._legend_height = legend_height
         self._legend_width = legend_width
@@ -119,7 +120,10 @@ class _RoadPlotter:
         for intersection in intersections:
             pos = intersection.pos - self._min_point
             pos.y = self._height - pos.y
-            self._draw_circle(pos, self._intersection_size)
+            if intersection.id in self._no_data_intersections:
+                self._draw_circle(pos, self._intersection_size, fill=(1,1,1))
+            else:
+                self._draw_circle(pos, self._intersection_size)
 
     def draw_all(self):
         ctx = self._ctx
@@ -219,15 +223,19 @@ class _RoadPlotter:
         ctx.rel_line_to(pos2.x, pos2.y)
         ctx.stroke()
 
-    def _draw_circle(self, pos: Point, size: float):
+    def _draw_circle(self, pos: Point, size: float, fill=(0,0,0), stroke=(0,0,0)):
         ctx = self._ctx
-
+        ctx.save()
         x, y = pos.x, pos.y
 
         ctx.arc(x, y, size / 2, 0, 2 * pi)
+        ctx.set_source_rgb(*fill)
         ctx.fill()
+        ctx.set_source_rgb(*stroke)
+        ctx.stroke()
+        ctx.restore()
 
-def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor) -> cairo.Surface:
+def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor, no_data_intersections: Optional[Set[str]] = None) -> cairo.Surface:
     """
 
     :param dataset:
@@ -235,7 +243,7 @@ def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor
     :return:
     """
 
-    drawer = _RoadPlotter(dataset.graph(), dataset.extract_vehicles_per_lane(data_tensor))
+    drawer = _RoadPlotter(dataset.graph(), dataset.extract_vehicles_per_lane(data_tensor), no_data_intersections=no_data_intersections)
     drawer.draw_all()
     return drawer.get_surface()
 
@@ -245,8 +253,6 @@ def main():
     data_file = "generated_data/manhattan_16_3_data.json"
 
     data = load_json(data_file)
-
-
     data_set = LaneVehicleCountDataset.from_files(roadnet_file, data_file)
 
     graph = RoadnetGraph(roadnet_file)

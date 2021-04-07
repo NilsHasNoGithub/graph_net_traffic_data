@@ -17,17 +17,20 @@ N_STEPS = 3600
 class Args:
     cfg_file: AnyStr
     out_file: AnyStr
+    shuffle_file: Optional[AnyStr]
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg-file", "-c", type=str, required=True)
     parser.add_argument("--out-file", "-o", type=str, required=True)
+    parser.add_argument("--shuffled-out-file", "-s", type=str)
 
     parsed = parser.parse_args()
 
     return Args(
         parsed.cfg_file,
-        parsed.out_file
+        parsed.out_file,
+        parsed.shuffled_out_file
     )
 
 @dataclass
@@ -108,6 +111,9 @@ def main(args: Args = None):
     data = collect_data(engine, graph, N_STEPS)
 
     store_json(data, args.out_file)
+    if args.shuffle_file is not None:
+        random.shuffle(data)
+        store_json(data, args.shuffle_file)
 
 
 if __name__ == '__main__':

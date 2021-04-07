@@ -3,10 +3,11 @@ certifi==2020.12.5
 chardet==4.0.0
 CityFlow @ git+https://github.com/cityflow-project/CityFlow@75f31b8ccc04bf0dd2952b704fdd3e20982cc78f
 cycler==0.10.0
-decorator==5.0.0
+decorator==4.4.2
 googledrivedownloader==0.4
 h5py==3.2.1
 idna==2.10
+install==1.3.4
 isodate==0.6.0
 Jinja2==2.11.3
 joblib==1.0.1
@@ -14,12 +15,12 @@ kiwisolver==1.3.1
 llvmlite==0.36.0
 MarkupSafe==1.1.1
 matplotlib==3.4.1
-networkx==2.5
+networkx==2.5.1
 numba==0.53.1
 numpy==1.20.2
+orjson==3.5.1
 pandas==1.2.3
 Pillow==8.2.0
-pycairo==1.20.0
 pyparsing==2.4.7
 python-dateutil==2.8.1
 python-louvain==0.15
@@ -30,14 +31,14 @@ scikit-learn==0.24.1
 scipy==1.6.2
 six==1.15.0
 threadpoolctl==2.1.0
-torch==1.8.1+cu111
+torch==1.8.1+cpu
 torch-cluster==1.5.9
 torch-geometric==1.6.3
 torch-scatter==2.0.6
 torch-sparse==0.6.9
 torch-spline-conv==1.2.1
 torchaudio==0.8.1
-torchvision==0.9.1+cu111
-tqdm==4.59.0
+torchvision==0.9.1+cpu
+tqdm==4.60.0
 typing-extensions==3.7.4.3
 urllib3==1.26.4

@@ -45,7 +45,7 @@ class DistributionCfg:
         # view mean and variance seperately [batch_size, 2    , n_hidden]
         x = x.view(*dims, self.n_params, distr_params // self.n_params)
 
-        params = [x.index_select(n_dims - 1, torch.tensor([i]).to(x.device)).squeeze().view(*dims, -1) for i in range(self.n_params)]
+        params = [x[..., i, :] for i in range(self.n_params)]
         params = self.param_transfms(*params)
 
         return params
@@ -199,7 +199,7 @@ class VariationalLayer(nn.Module):
         self.n_in = n_in
         self.n_out = n_out
 
-        self.linear = nn.Linear(n_in,  distr_cfg.n_params * n_out)
+        self.linear = nn.Linear(n_in,  distr_cfg.n_params*n_out)
 
     def forward(self, x: Tensor):
 
@@ -218,7 +218,7 @@ class VariationalEncoderLayer(nn.Module):
         self.n_in = n_in
         self.n_out = n_out
 
-        self.linear = nn.Linear(n_in, 2 * n_out)
+        self.linear = nn.Linear(n_in, NORMAL_DISTR.n_params * n_out)
 
     def forward(self, x: Tensor):
 
