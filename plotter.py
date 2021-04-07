@@ -12,9 +12,6 @@ from utils import load_json
 from load_data import LaneVehicleCountDataset
 from math import sqrt, asin, pi, atan
 
-
-
-
 class _RoadPlotter:
 
     @staticmethod
@@ -256,8 +253,6 @@ def main():
     data_file = "generated_data/manhattan_16_3_data.json"
 
     data = load_json(data_file)
-
-
     data_set = LaneVehicleCountDataset.from_files(roadnet_file, data_file)
 
     graph = RoadnetGraph(roadnet_file)

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 
 import torch
 from torch import nn, Tensor
@@ -67,7 +67,23 @@ class GNNVAEModel(nn.Module):
 
     def _tensor_to_batch(self, x: Tensor) -> Batch:
         # x: [batch_size, n_intersections, n_features]
-        ...
+        batch_size, n_intersections, n_features = x.size()
+
+        data_list = []
+
+        for i in range(batch_size):
+            data = Data(x=x[i, ...], edge_index=self._edges)
+            data_list.append(data)
+
+        return Batch.from_data_list(data_list)
+
+    def _batch_to_tensor(self, batch: Batch) -> Tensor:
+        data_list = batch.to_data_list()
+
+        result = torch.stack([data.x for data in data_list], dim=0)
+        return result
+
+
 
     def get_model_state(self) -> GNNVAEModelState:
         return GNNVAEModelState(
@@ -82,12 +98,12 @@ class GNNVAEModel(nn.Module):
 
        x = self._variational_encoder.random_output([len(self._adj_list), self._n_out])
 
-       x = self._gnn_decoder(x)
+       x = self._gnn_decoder(x, self._edges)
        x = self._variational_decoder(x)
 
        return x
 
-    def forward(self, x: torch.Tensor, calc_kl_div=False):
+    def forward(self, x: Union[torch.Tensor, Data], calc_kl_div=False):
         """
 
         :param x:
@@ -96,7 +112,14 @@ class GNNVAEModel(nn.Module):
         """
         assert x.dim() == 3
 
-        x = self._gnn_encoder(x)
+        # if isinstance(x, Tensor):
+        #     batch_x = self._tensor_to_batch(x)
+        # else:
+        #     batch_x = x
+
+
+        x = self._gnn_encoder(x, self._edges)
+
 
         if calc_kl_div:
             x, kl_loss = self._variational_encoder(x, calc_kl_div=True)
@@ -104,8 +127,14 @@ class GNNVAEModel(nn.Module):
             x = self._variational_encoder(x)
             kl_loss = None
 
-        x = self._gnn_decoder(x)
+
+        # batch_x.x = x
+
+        x = self._gnn_decoder(x, self._edges)
         x = self._variational_decoder(x)
+
+        # batch_x.x = x
+        # x = self._batch_to_tensor(batch_x)
 
         if calc_kl_div:
             return x, kl_loss

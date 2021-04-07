@@ -81,7 +81,7 @@ def main():
 
     print(f"num parameters: {sum(p.numel() for p in model.parameters())}")
 
-    input_data_im = gen_data_visualization(data_val, sample, no_data_intersections=hidden_intersections)
+    input_data_im = gen_data_visualization(data_val, target, no_data_intersections=hidden_intersections)
     output_data_im = gen_data_visualization(data_val, y, no_data_intersections=hidden_intersections)
     random_data_im = gen_data_visualization(data_val, random_y)
 

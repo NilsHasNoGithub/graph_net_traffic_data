@@ -79,7 +79,10 @@ class LaneVehicleCountDataset(Dataset):
     def graph(self) -> RoadnetGraph:
         return self._graph
 
-    def sample_shape(self) -> torch.Size:
+    def input_shape(self) -> torch.Size:
+        return self[0].shape
+
+    def output_shape(self) -> torch.Size:
         return self[0].shape
 
     def graph_adjacency_list(self) -> List[List[int]]:
