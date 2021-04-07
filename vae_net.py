@@ -197,7 +197,7 @@ class VariationalEncoderLayer(nn.Module):
         self.n_in = n_in
         self.n_out = n_out
 
-        self.linear = nn.Linear(n_in, 2 * n_out)
+        self.linear = nn.Linear(n_in, NORMAL_DISTR.n_params * n_out)
 
     def forward(self, x: Tensor, calc_kl_div=False):
 

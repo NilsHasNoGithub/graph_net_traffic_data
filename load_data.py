@@ -17,14 +17,14 @@ def flatten(l: List[List]) -> List:
 class LaneVehicleCountDataset(Dataset):
 
     @staticmethod
-    def train_test_from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, shuffle=True, shuffle_chunk_size=10):
+    def train_test_from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, shuffle=True, shuffle_chunk_size=1):
         return (
             LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=True, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size),
             LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=False, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
         )
 
     @staticmethod
-    def from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, train=True, shuffle=True, shuffle_chunk_size=10) -> "LaneVehicleCountDataset":
+    def from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, train=True, shuffle=True, shuffle_chunk_size=1) -> "LaneVehicleCountDataset":
         data = load_json(lane_data_file)
         graph = RoadnetGraph(roadnet_file)
 
@@ -63,7 +63,7 @@ class LaneVehicleCountDataset(Dataset):
         return result
 
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=10):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1):
         assert len(data) > 5, "data should contain at least 5 elements"
         i_split = int(0.8*len(data))
 
@@ -201,7 +201,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def output_shape(self) -> torch.Size:
         return self[0][1].shape
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=10, p_missing=0.2, enhance_factor=5):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing=0.2, enhance_factor=5):
         LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
 
         self._data_hidden = LaneVehicleCountDatasetMissing._generate_missing_sensor_data(self._data, graph, p_missing, enhance_factor)

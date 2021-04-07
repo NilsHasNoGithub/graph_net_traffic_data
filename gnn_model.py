@@ -75,10 +75,12 @@ class IntersectionGNN(nn.Module):
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
         """
 
+        :param edge_index:
         :param x: tensor of shape [batch_size, n_intersections, n_features]
         :return:
         """
         for layer in self._layers:
             x = layer(x, edge_index)
+            x = self._activation(x)
 
         return x
