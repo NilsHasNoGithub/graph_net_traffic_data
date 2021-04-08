@@ -101,7 +101,7 @@ def train(
             optimizer.zero_grad()
 
             output: VAEEncoderForwardResult = model(inputs)
-            loss = loss_fn_weight * loss_fn(output, targets) + output.kl_div
+            loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
             loss.backward()
 
             optimizer.step()
@@ -120,7 +120,7 @@ def train(
                 targets = targets.to(device)
 
                 output: VAEEncoderForwardResult = model(inputs)
-                loss = loss_fn_weight * loss_fn(output, targets) + output.kl_div
+                loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
 
                 cur_val_loss += loss.item()
 
@@ -146,21 +146,16 @@ def train(
         val_losses
     )
 
-def categorical_loss_fn(output: GNNVAEForwardResult, targets: Tensor) -> Tensor:
-    probs = output.params[0]
+def categorical_loss_fn(probs: Tensor, targets: Tensor) -> Tensor:
     losses: Tensor = torch.zeros(*probs.size(), dtype=torch.float32).to(targets.device)
+
 
     for i in range(probs.size()[-1]):
         losses[:,:,:,i] = (targets - i) ** 2
 
     losses = probs * losses
-    # selected_losses = torch.zeros(targets.size(), device=targets.device, dtype=torch.float32)
-    #
-    #
-    # for i,j,k in cart_product(*(range(l) for l in targets.size())):
-    #     selected_losses[i,j,k] = losses[i,j,k,output.x[i,j,k]]
+    losses = torch.sum(losses, dim=-1)
 
-    # selected_losses = torch.tensor(selected_losses)
     return torch.mean(losses)
 
 
@@ -184,6 +179,7 @@ def main():
         model = GNNVAEModel(data_train.input_shape()[1], data_train.graph_adjacency_list(), n_out=data_train.output_shape()[1])
 
     loss_fn = categorical_loss_fn
+    # loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
 
     results = train(

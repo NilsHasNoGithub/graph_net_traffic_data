@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch import nn
 
 from gnn_model import IntersectionGNN
-from full_model import GNNVAEModel
+from full_model import GNNVAEModel, GNNVAEForwardResult
 import matplotlib.pyplot as plt
 import time
 
@@ -63,9 +63,12 @@ def main():
     output_shape = data_val.output_shape()
 
     y = model(sample.view(1, *input_shape))
+    y = y.get_output()
     y = y.view(*output_shape)
 
-    random_y = model.sample().view(*output_shape)
+    random_y = model.sample()
+    random_y = random_y.get_output()
+    random_y = random_y.view(*output_shape)
 
     #
     torch.set_printoptions(edgeitems=100000)

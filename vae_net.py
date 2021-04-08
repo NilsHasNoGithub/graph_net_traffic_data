@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as funct
 from torch.tensor import Tensor
-from torch.distributions import Distribution, Categorical
+from torch.distributions import Distribution, Categorical, OneHotCategoricalStraightThrough
 from torch.distributions.normal import Normal
 from torch.distributions.log_normal import LogNormal
 import numpy as np
@@ -83,6 +83,9 @@ LOGNORMAL_DISTR = DistributionCfg(2, LogNormal, _normal_param_transform)
 
 def categorical_distr(n_categories: int) -> DistributionCfg:
     return DistributionCfg(n_categories, Categorical, _categorical_param_transform)
+
+def one_hot_categorical_distr(n_categories: int) -> DistributionCfg:
+    return DistributionCfg(n_categories, OneHotCategoricalStraightThrough, _categorical_param_transform)
 
 @dataclass
 class VAENetData:

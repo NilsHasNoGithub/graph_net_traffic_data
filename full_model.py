@@ -4,7 +4,7 @@ import torch
 from torch import nn, Tensor
 from gnn_model import IntersectionGNN
 from vae_net import VAENet, VariationalEncoderLayer, VariationalLayer, LOGNORMAL_DISTR, categorical_distr, \
-    VAEEncoderForwardResult, VAEDecoderForwardResult
+    VAEEncoderForwardResult, VAEDecoderForwardResult, one_hot_categorical_distr
 from dataclasses import dataclass
 from typing import Any, Optional
 from torch.distributions.normal import Normal
@@ -18,7 +18,13 @@ class GNNVAEModelState:
     n_out: int
     n_hidden: int
 
-GNNVAEForwardResult = VAEEncoderForwardResult
+
+class GNNVAEForwardResult(VAEEncoderForwardResult):
+
+    def get_output(self) -> Tensor:
+        # x: [batch_size, n_intersections, n_features, n_categories]
+        x = torch.argmax(self.x, dim=-1)
+        return x
 
 class GNNVAEModel(nn.Module):
 
@@ -66,7 +72,8 @@ class GNNVAEModel(nn.Module):
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
         self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_hidden)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
-        self._variational_decoder = VariationalLayer(n_features, n_out, distr_cfg=categorical_distr(30))
+        self._variational_decoder = VariationalLayer(n_features, n_out, distr_cfg=one_hot_categorical_distr(30))
+        # self._variational_decoder = VariationalLayer(n_features, n_out, distr_cfg=LOGNORMAL_DISTR)
 
     def get_model_state(self) -> GNNVAEModelState:
         return GNNVAEModelState(
@@ -83,10 +90,9 @@ class GNNVAEModel(nn.Module):
 
        x = self._gnn_decoder(x, self._edges)
 
-       x = self._gnn_decoder(x, self._edges)
        x: VAEDecoderForwardResult = self._variational_decoder(x)
 
-       return x.x
+       return GNNVAEForwardResult(x.x, torch.tensor(0.0), x.params)
 
 
     def forward(self, x: Tensor):
