@@ -1,5 +1,6 @@
 import math
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple, Set, Optional
 
 import cairo
@@ -64,8 +65,10 @@ class _RoadPlotter:
     def __init__(
             self,
             graph: RoadnetGraph,
-            data: Dict[str, float],
+            intersection_lane_data: Dict[Tuple[str, str], float],
             no_data_intersections: Optional[Set[str]] = None,
+            data_min: Optional[float]=None,
+            data_max: Optional[float]=None,
             intersection_size=55,
             padding=30,
             legend_width=100,
@@ -75,7 +78,7 @@ class _RoadPlotter:
 
         :param ctx: Cairo context
         :param graph: Intersection graph containing data to draw
-        :param data: data to display on edges
+        :param intersection_lane_data: Dictionary with intersections, edges as keys and the values to plot
         """
         graph = deepcopy(graph)
 
@@ -92,7 +95,7 @@ class _RoadPlotter:
 
         self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         self._ctx = cairo.Context(self._surface)
-        self._data = data
+        self._lane_data = intersection_lane_data
         self._graph = graph
         self._no_data_intersections = set() if no_data_intersections is None else no_data_intersections
         self._intersection_size = intersection_size
@@ -102,7 +105,8 @@ class _RoadPlotter:
         self._width = width
         self._height = height
 
-        self._data_max = _RoadPlotter._calc_data_max(graph, data)
+        self._data_max = max(intersection_lane_data.values()) if data_max is None else data_max
+        self._data_min = min(intersection_lane_data.values()) if data_min is None else data_min
 
         self._drawn_road_ids = set()
 
@@ -112,18 +116,6 @@ class _RoadPlotter:
         for intersection in intersections:
             self._draw_intersection(intersection)
 
-        for intersection in intersections:
-            for road in intersection.outgoing_roads:
-                if road.id not in self._drawn_road_ids:
-                    self._draw_lanes(road, False)
-
-        for intersection in intersections:
-            pos = intersection.pos - self._min_point
-            pos.y = self._height - pos.y
-            if intersection.id in self._no_data_intersections:
-                self._draw_circle(pos, self._intersection_size, fill=(1,1,1))
-            else:
-                self._draw_circle(pos, self._intersection_size)
 
     def draw_all(self):
         ctx = self._ctx
@@ -138,20 +130,27 @@ class _RoadPlotter:
     def get_surface(self) -> cairo.Surface:
         return self._surface
 
-    def _calc_rgb_from_business(self, business: float):
-        assert 0.0 <= business <= 1.0
-        return business, 0.5 - 0.5 * business, 0.0
+    def _calc_rgb_from_scale(self, scale: float):
+        assert 0.0 <= scale <= 1.0
+        return scale, 0.5 - 0.5 * scale, 0.0
 
-    def _calc_lane_rgb_val(self, lane_id: str, road: Road) -> (float, float, float):
-        vh_count = self._data[lane_id]
-        business = max(0.0, (vh_count / road.length()) / self._data_max)
+    def _calc_lane_rgb_val(self, intersection_id: str, lane_id: str) -> (float, float, float):
+        scale = max(0.0, self._lane_data[(intersection_id, lane_id)] / self._data_max)
 
-        return self._calc_rgb_from_business(business)
+        return self._calc_rgb_from_scale(scale)
 
     def _draw_intersection(self, intersection: Intersection):
-        for road in intersection.incoming_roads:
-            self._drawn_road_ids.add(road.id)
-            self._draw_lanes(road, True)
+
+        for roads, incoming in ((intersection.incoming_roads, True), (intersection.outgoing_roads, False)):
+            for road in roads:
+                self._draw_lanes(road, intersection, incoming)
+
+        pos = intersection.pos - self._min_point
+        pos.y = self._height - pos.y
+        if intersection.id in self._no_data_intersections:
+            self._draw_circle(pos, self._intersection_size, fill=(1, 1, 1))
+        else:
+            self._draw_circle(pos, self._intersection_size)
 
     def _draw_legend(self, txt_size=30, txt_spacing=20):
         ctx = self._ctx
@@ -165,7 +164,7 @@ class _RoadPlotter:
 
         for i in range(self._legend_height - int(1.5 * txt_spacing)):
             business = 1 - (i / (self._legend_height - 1))
-            ctx.set_source_rgb(*self._calc_rgb_from_business(business))
+            ctx.set_source_rgb(*self._calc_rgb_from_scale(business))
             ctx.rectangle(*(legend_pos + Point(0, i)), self._legend_width, 1)
             ctx.fill()
 
@@ -178,9 +177,14 @@ class _RoadPlotter:
         ctx.show_text("0")
         ctx.restore()
 
-    def _draw_lanes(self, road: Road, is_incoming: bool, offset=5.5):
-        start = deepcopy(road.start)
-        end = deepcopy(road.end)
+    def _draw_lanes(self, road: Road, intersection: Intersection, is_incoming, offset=5.5):
+
+        if is_incoming:
+            start = road.middle()
+            end = deepcopy(road.end)
+        else:
+            start = deepcopy(road.start)
+            end = road.middle()
 
         start -= self._min_point
         start.y = self._height - start.y
@@ -206,10 +210,13 @@ class _RoadPlotter:
         for i, lane_id in enumerate(sorted(road.lanes)):
             ctx.move_to(start.x, start.y)
             ctx.rotate(angle)
-            if is_incoming:
-                ctx.set_source_rgb(*self._calc_lane_rgb_val(lane_id, road))
-            else:
-                ctx.set_source_rgb(0,0,0)
+
+            try:
+                rgb = self._calc_lane_rgb_val(intersection.id, lane_id)
+            except KeyError:
+                rgb = (0,0,0)
+
+            ctx.set_source_rgb(*rgb)
             # ctx.set_source_rgb(i*(1/2),0,0)
             self._draw_line_rel(Point((i + 1) * offset, 0), Point(0, road_len))
 
@@ -235,7 +242,7 @@ class _RoadPlotter:
         ctx.stroke()
         ctx.restore()
 
-def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor, no_data_intersections: Optional[Set[str]] = None) -> cairo.Surface:
+def gen_data_visualization(dataset: LaneVehicleCountDataset, lane_data: Dict[Tuple[str, str], float], no_data_intersections: Optional[Set[str]] = None, max_=None, min_=None) -> cairo.Surface:
     """
 
     :param dataset:
@@ -243,9 +250,41 @@ def gen_data_visualization(dataset: LaneVehicleCountDataset, data_tensor: Tensor
     :return:
     """
 
-    drawer = _RoadPlotter(dataset.graph(), dataset.extract_vehicles_per_lane(data_tensor), no_data_intersections=no_data_intersections)
+
+
+    drawer = _RoadPlotter(dataset.graph(), lane_data, no_data_intersections=no_data_intersections, data_max=max_, data_min=min_)
     drawer.draw_all()
     return drawer.get_surface()
+
+@dataclass
+class IORVizualizations:
+    input: cairo.Surface
+    output: cairo.Surface
+    random: cairo.Surface
+
+def gen_input_output_random_vizualization(
+        dataset: LaneVehicleCountDataset,
+        data_input: Tensor,
+        data_output: Tensor,
+        data_random: Tensor,
+        no_data_intersections: Optional[Set[str]] = None
+):
+    datas = (data_input, data_output, data_random)
+    datas = (dataset.extract_data_per_lane_per_intersection(data) for data in datas)
+
+    graph = dataset.graph()
+
+    datas_scaled = []
+    for data in datas:
+        data_scaled = {(i_id, lane):v/(graph.road_of_lane(lane).length()/2) for (i_id, lane), v in data.items()}
+        datas_scaled.append(data_scaled)
+
+    max_ = max(v for data in datas_scaled for v in data.values())
+
+    io_viss = (gen_data_visualization(dataset, data, no_data_intersections=no_data_intersections, min_=0.0, max_=max_) for data in datas_scaled[:2])
+    r_vis = gen_data_visualization(dataset, datas_scaled[2], min_=0.0)
+
+    return IORVizualizations(*io_viss, r_vis)
 
 
 def main():
@@ -261,7 +300,7 @@ def main():
     n_intersections = 48
     n_intersections_per_row = 3
     n_intersections_per_height = math.ceil(n_intersections / n_intersections_per_row)
-    drawer = _RoadPlotter(graph, data_set.extract_vehicles_per_lane(data_set[2567]))
+    drawer = _RoadPlotter(graph, data_set.extract_data_per_lane(data_set[2567]))
 
     drawer.draw_all()
 

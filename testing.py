@@ -15,7 +15,7 @@ from full_model import GNNVAEModel, GNNVAEForwardResult
 import matplotlib.pyplot as plt
 import time
 
-from plotter import gen_data_visualization
+from plotter import gen_data_visualization, gen_input_output_random_vizualization
 
 from utils import DEVICE
 
@@ -49,18 +49,18 @@ def parse_args():
 def main():
     args = parse_args()
 
-    t = 500
+    t = 2000
 
-    data_train, data_val = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing)
+    dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False)
 
     state = torch.load(args.model_file)
     model = GNNVAEModel.from_model_state(state)
 
     loss_fn = nn.MSELoss()
 
-    sample, target, hidden_intersections = data_val.get_item(t, return_hidden_intersections=True)
-    input_shape = data_val.input_shape()
-    output_shape = data_val.output_shape()
+    sample, target, hidden_intersections = dataset.get_item(t, return_hidden_intersections=True)
+    input_shape = dataset.input_shape()
+    output_shape = dataset.output_shape()
 
     y = model(sample.view(1, *input_shape))
     y = y.get_output()
@@ -83,13 +83,11 @@ def main():
 
     print(f"num parameters: {sum(p.numel() for p in model.parameters())}")
 
-    input_data_im = gen_data_visualization(data_val, target, no_data_intersections=hidden_intersections)
-    output_data_im = gen_data_visualization(data_val, y, no_data_intersections=hidden_intersections)
-    random_data_im = gen_data_visualization(data_val, random_y)
+    ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections)
 
-    input_data_im.write_to_png("results/input.png")
-    output_data_im.write_to_png("results/output.png")
-    random_data_im.write_to_png("results/random.png")
+    ior_result.input.write_to_png("results/input.png")
+    ior_result.output.write_to_png("results/output.png")
+    ior_result.random.write_to_png("results/random.png")
 
     # input_names = ['Original']
     # output_names = ['Reconstructed']

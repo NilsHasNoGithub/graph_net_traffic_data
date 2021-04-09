@@ -123,7 +123,22 @@ class LaneVehicleCountDataset(Dataset):
 
         return counts
 
-    def extract_vehicles_per_lane(self, t: Tensor) -> Dict[str, float]:
+    def extract_data_per_lane_per_intersection(self, t:Tensor) -> Dict[Tuple[str, str], float]:
+        n_intersections, n_features = t.size()
+        intersections = self._graph.intersection_list()
+
+        assert n_intersections == len(intersections)
+
+        result = {}
+
+        for i, intersection in enumerate(intersections):
+            feats = t[i, :]
+            for j, lane_id in enumerate(intersection.incoming_lanes + intersection.outgoing_lanes):
+                result[(intersection.id, lane_id)] = feats[j].item()
+
+        return result
+
+    def extract_data_per_lane(self, t: Tensor) -> Dict[str, float]:
         """
 
         :param t: Tensor should be of shape [n_agents, n_features]
@@ -135,11 +150,10 @@ class LaneVehicleCountDataset(Dataset):
 
         result = {lane: 0.0 for lane in self._graph.lanes_iter()}
 
-        for i in range(n_intersections):
-            feats = t[i, :]
-            intersection: Intersection = intersections[i]
-            for j, lane_id in enumerate(intersection.incoming_lanes + intersection.outgoing_lanes):
-                result[lane_id] += feats[j].item()
+        feats = self.extract_data_per_lane_per_intersection(t)
+
+        for ((_, lane), v) in feats:
+            result[lane] += v
 
         return result
 
@@ -266,7 +280,7 @@ if __name__ == "__main__":
     a = data_train[t]
 
     feat_dict_original = data_train.get_feature_dict(t)
-    feat_dict_processed = data_train.extract_vehicles_per_lane(a)
+    feat_dict_processed = data_train.extract_data_per_lane(a)
     assert feat_dict_processed == feat_dict_original
 
     a,b = data_train_m[t]

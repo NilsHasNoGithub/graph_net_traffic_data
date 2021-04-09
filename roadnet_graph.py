@@ -208,6 +208,17 @@ class RoadnetGraph:
             for lane in road.lanes:
                 yield lane
 
+    def road_of_lane(self, lane) -> Road:
+        road_id = lane
+
+        while road_id[-1] != "_":
+            road_id = road_id[:-1]
+
+        if road_id[-1] != "_":
+            raise ValueError()
+
+        road_id = road_id[:-1]
+        return self._road_dict[road_id]
 
     def idx_adjacency_lists(self) -> List[List[int]]:
         """
