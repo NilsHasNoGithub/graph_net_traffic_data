@@ -51,7 +51,7 @@ def main():
 
     t = 2000
 
-    dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False)
+    dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
 
     state = torch.load(args.model_file)
     model = GNNVAEModel.from_model_state(state)
@@ -63,11 +63,13 @@ def main():
     output_shape = dataset.output_shape()
 
     y = model(sample.view(1, *input_shape))
-    y = y.get_output()
+    # y = y.get_output()
+    y = y.x
     y = y.view(*output_shape)
 
     random_y = model.sample()
-    random_y = random_y.get_output()
+    # random_y = random_y.get_output()
+    random_y = random_y.x
     random_y = random_y.view(*output_shape)
 
     #
@@ -83,7 +85,7 @@ def main():
 
     print(f"num parameters: {sum(p.numel() for p in model.parameters())}")
 
-    ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections)
+    ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections, scale_data_by_road_len=True)
 
     ior_result.input.write_to_png("results/input.png")
     ior_result.output.write_to_png("results/output.png")

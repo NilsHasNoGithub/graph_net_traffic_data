@@ -267,22 +267,28 @@ def gen_input_output_random_vizualization(
         data_input: Tensor,
         data_output: Tensor,
         data_random: Tensor,
-        no_data_intersections: Optional[Set[str]] = None
+        no_data_intersections: Optional[Set[str]] = None,
+        scale_data_by_road_len = False
 ):
     datas = (data_input, data_output, data_random)
-    datas = (dataset.extract_data_per_lane_per_intersection(data) for data in datas)
+    datas = [dataset.extract_data_per_lane_per_intersection(data) for data in datas]
 
     graph = dataset.graph()
 
-    datas_scaled = []
-    for data in datas:
-        data_scaled = {(i_id, lane):v/(graph.road_of_lane(lane).length()/2) for (i_id, lane), v in data.items()}
-        datas_scaled.append(data_scaled)
+    if scale_data_by_road_len:
+        datas_scaled = []
 
-    max_ = max(v for data in datas_scaled for v in data.values())
+        for data in datas:
+            data_scaled = {(i_id, lane):v/(graph.road_of_lane(lane).length()/2) for (i_id, lane), v in data.items()}
+            datas_scaled.append(data_scaled)
 
-    io_viss = (gen_data_visualization(dataset, data, no_data_intersections=no_data_intersections, min_=0.0, max_=max_) for data in datas_scaled[:2])
-    r_vis = gen_data_visualization(dataset, datas_scaled[2], min_=0.0)
+        datas = datas_scaled
+
+    max_ = max(v for data in datas for v in data.values())
+    # max_ = None
+
+    io_viss = (gen_data_visualization(dataset, data, no_data_intersections=no_data_intersections, min_=0.0, max_=max_) for data in datas[:2])
+    r_vis = gen_data_visualization(dataset, datas[2], min_=0.0)
 
     return IORVizualizations(*io_viss, r_vis)
 

@@ -18,21 +18,21 @@ def flatten(l: List[List]) -> List:
 class LaneVehicleCountDataset(Dataset):
 
     @staticmethod
-    def train_test_from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, shuffle=True, shuffle_chunk_size=1):
+    def train_test_from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, **kwargs):
         return (
-            LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=True, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size),
-            LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=False, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
+            LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=True, **kwargs),
+            LaneVehicleCountDataset.from_files(roadnet_file, lane_data_file, train=False, **kwargs)
         )
 
     @staticmethod
-    def from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, train=True, shuffle=True, shuffle_chunk_size=1) -> "LaneVehicleCountDataset":
+    def from_files(roadnet_file: AnyStr, lane_data_file: AnyStr, **kwargs) -> "LaneVehicleCountDataset":
         data = load_json(lane_data_file)
         graph = RoadnetGraph(roadnet_file)
 
-        return LaneVehicleCountDataset(graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
+        return LaneVehicleCountDataset(graph, data, **kwargs)
 
     @staticmethod
-    def _data_pre_process(graph: RoadnetGraph, data: List[Dict]) -> List[Dict[str, Dict[str, float]]]:
+    def _data_pre_process(graph: RoadnetGraph, data: List[Dict], scale_by_road_len: bool) -> List[Dict[str, Dict[str, float]]]:
         intersections = graph.intersection_list()
 
         result = []
@@ -42,9 +42,11 @@ class LaneVehicleCountDataset(Dataset):
             # Initialize all vh counts with 0
             new_data_t = {}
             for intersection in intersections:
-                new_data_t[intersection.id] = {}
+                i_lane_data = {}
                 for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes:
-                    new_data_t[intersection.id][lane_id] = 0.0
+                    i_lane_data[lane_id] = 0.0
+
+                new_data_t[intersection.id] = i_lane_data
 
             lane_car_infos: Dict[str, Dict] = data_t["laneVehicleInfos"]
 
@@ -61,10 +63,20 @@ class LaneVehicleCountDataset(Dataset):
 
             result.append(new_data_t)
 
+        if scale_by_road_len:
+            for data_t in result:
+                for intersection in intersections:
+                    for road in intersection.incoming_roads + intersection.outgoing_roads:
+                        for lane_id in road.lanes:
+                            try:
+                                data_t[intersection.id][lane_id] /= road.length() / 2
+                            except KeyError:
+                                pass
+
         return result
 
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, scale_by_road_len=False):
         assert len(data) > 5, "data should contain at least 5 elements"
         i_split = int(0.8*len(data))
 
@@ -75,7 +87,7 @@ class LaneVehicleCountDataset(Dataset):
             random.shuffle(data)
             data = flatten(data)
 
-        self._data = LaneVehicleCountDataset._data_pre_process(graph, data)
+        self._data = LaneVehicleCountDataset._data_pre_process(graph, data, scale_by_road_len)
         self._graph = graph
 
     def graph(self) -> RoadnetGraph:
@@ -212,8 +224,8 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def output_shape(self) -> torch.Size:
         return self[0][1].shape
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution]]=None):
-        LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size)
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution]]=None, scale_by_road_len=False):
+        LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size, scale_by_road_len=scale_by_road_len)
 
         if p_missing is None:
             p_missing = 0.2
@@ -235,6 +247,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
 
         for intersection in self._graph.intersection_list():
             intersection_data = data_t[intersection.id]
+
 
             counts = [intersection_data.data[lane_id] for lane_id in
                       intersection.incoming_lanes + intersection.outgoing_lanes]

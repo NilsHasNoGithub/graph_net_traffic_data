@@ -100,7 +100,7 @@ def train(
 
             optimizer.zero_grad()
 
-            output: VAEEncoderForwardResult = model(inputs)
+            output: GNNVAEForwardResult= model(inputs)
             loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
             loss.backward()
 
@@ -119,7 +119,7 @@ def train(
                 inputs = inputs.to(device)
                 targets = targets.to(device)
 
-                output: VAEEncoderForwardResult = model(inputs)
+                output: GNNVAEForwardResult = model(inputs)
                 loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
 
                 cur_val_loss += loss.item()
@@ -146,27 +146,15 @@ def train(
         val_losses
     )
 
-def categorical_loss_fn(probs: Tensor, targets: Tensor) -> Tensor:
-    losses: Tensor = torch.zeros(*probs.size(), dtype=torch.float32).to(targets.device)
-
-
-    for i in range(probs.size()[-1]):
-        losses[:,:,:,i] = (targets - i) ** 2
-
-    losses = probs * losses
-    losses = torch.sum(losses, dim=-1)
-
-    return torch.mean(losses)
-
 
 def main():
     args = parse_args()
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    distr = torch.distributions.Beta(1.575, 3.675)
+    p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
 
-    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=distr)
+    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)
@@ -178,8 +166,7 @@ def main():
     else:
         model = GNNVAEModel(data_train.input_shape()[1], data_train.graph_adjacency_list(), n_out=data_train.output_shape()[1])
 
-    loss_fn = categorical_loss_fn
-    # loss_fn = nn.MSELoss()
+    loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
 
     results = train(
