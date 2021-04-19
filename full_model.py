@@ -4,7 +4,7 @@ import torch
 from torch import nn, Tensor
 from gnn_model import IntersectionGNN
 from vae_net import VariationalEncoderLayer, VariationalLayer, VAEEncoderForwardResult, VAECategoricalDistr, \
-    VAELogNormalDistr, VAEDecoderForwardResult
+    VAELogNormalDistr, VAEDecoderForwardResult, VAEDistr
 from dataclasses import dataclass
 from typing import Any, Optional
 from torch.distributions.normal import Normal
@@ -18,16 +18,13 @@ class GNNVAEModelState:
     n_out: int
     n_hidden: int
 
+@dataclass
+class GNNVAEForwardResult:
+    x: Tensor
+    kl_div: Tensor
+    params_encoder: List[Tensor]
+    params_decoder: List[Tensor]
 
-class GNNVAEForwardResult(VAEEncoderForwardResult):
-
-    def get_output(self) -> Tensor:
-        # x: [batch_size, n_intersections, n_features, n_categories]
-        batch_size, n_intersections, n_features, n_categories = self.x.size()
-        categories = torch.arange(0, n_categories, step=1, dtype=torch.float32)
-        x = self.x * categories
-        x = torch.sum(x, dim=-1)
-        return x
 
 class GNNVAEModel(nn.Module):
 
@@ -71,12 +68,12 @@ class GNNVAEModel(nn.Module):
         self._adj_list = adj_list
 
 
-
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
         self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_hidden)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
-        self._variational_decoder = VariationalLayer(n_features, n_out, distr=VAECategoricalDistr(30))
-        # self._variational_decoder = VariationalLayer(n_features, n_out, distr=VAELogNormalDistr())
+        # Change to not sampling
+        # self._variational_decoder = VariationalLayer(n_features, n_out, distr=VAECategoricalDistr(30))
+        self._variational_decoder = VariationalLayer(n_features, n_out, distr=VAELogNormalDistr())
 
     def get_model_state(self) -> GNNVAEModelState:
         return GNNVAEModelState(
@@ -87,6 +84,9 @@ class GNNVAEModel(nn.Module):
             self._n_hidden
         )
 
+    def distr(self) -> VAEDistr:
+        return self._variational_decoder.distr
+
     def sample(self):
 
        x = self._variational_encoder.random_output([len(self._adj_list), self._n_out])
@@ -95,7 +95,7 @@ class GNNVAEModel(nn.Module):
 
        x: VAEDecoderForwardResult = self._variational_decoder(x)
 
-       return GNNVAEForwardResult(x.x, torch.tensor(0.0), x.params)
+       return VAEEncoderForwardResult(x.x, torch.tensor(0.0), x.params)
 
 
     def forward(self, x: Tensor):
@@ -121,4 +121,4 @@ class GNNVAEModel(nn.Module):
         x = self._gnn_decoder(encoder_result.x, self._edges)
         decoder_result: VAEDecoderForwardResult = self._variational_decoder(x)
 
-        return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, decoder_result.params)
+        return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, encoder_result.params, decoder_result.params)

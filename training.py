@@ -101,7 +101,7 @@ def train(
             optimizer.zero_grad()
 
             output: GNNVAEForwardResult= model(inputs)
-            loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
+            loss = loss_fn(output, targets)
             loss.backward()
 
             optimizer.step()
@@ -120,7 +120,7 @@ def train(
                 targets = targets.to(device)
 
                 output: GNNVAEForwardResult = model(inputs)
-                loss = loss_fn_weight * loss_fn(output.x, targets) + output.kl_div
+                loss = loss_fn(output, targets)
 
                 cur_val_loss += loss.item()
 
@@ -147,6 +147,13 @@ def train(
     )
 
 
+def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
+    def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
+        return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
+
+    return loss_fn
+
+
 def main():
     args = parse_args()
 
@@ -166,13 +173,12 @@ def main():
     else:
         model = GNNVAEModel(data_train.input_shape()[1], data_train.graph_adjacency_list(), n_out=data_train.output_shape()[1])
 
-    loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
 
     results = train(
         model,
         optimizer,
-        loss_fn,
+        mk_loss_fn(model),
         train_dl,
         val_dl,
         n_epochs=args.n_epochs,

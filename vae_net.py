@@ -37,6 +37,10 @@ class VAEDistr(ABC):
     def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
         raise NotImplementedError()
 
+    @abstractmethod
+    def log_prob(self, params: List[Tensor], value: Tensor):
+        raise NotImplementedError()
+
     def rsample(self, x: Tensor) -> Tuple[Tensor, List[Tensor]]:
         """
 
@@ -53,28 +57,39 @@ class VAENormalDistr(VAEDistr):
     def __init__(self):
         VAEDistr.__init__(self, 2)
 
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def _transform_params(self, *params) -> List[Tensor]:
         loc, scale = params
 
         scale = funct.softplus(scale)
         scale = torch.add(scale, 0.00000001)
 
+        return [loc, scale]
+
+    def log_prob(self, params: List[Tensor], value: Tensor) -> float:
+        loc, scale = params
+        distr = LogNormal(loc, scale)
+        return distr.log_prob(value)
+
+    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+        loc, scale = self._transform_params(*params)
+        distr = LogNormal(loc, scale)
+        return distr.rsample(), [loc, scale]
+
+class VAELogNormalDistr(VAENormalDistr):
+
+    def __init__(self):
+        VAENormalDistr.__init__(self)
+
+    def log_prob(self, params: List[Tensor], value: Tensor) -> float:
+        loc, scale = params
+        distr = Normal(loc, scale)
+        return distr.log_prob(value)
+
+    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+        loc, scale = self._transform_params(*params)
         distr = Normal(loc, scale)
         return distr.rsample(), [loc, scale]
 
-class VAELogNormalDistr(VAEDistr):
-
-    def __init__(self):
-        VAEDistr.__init__(self, 2)
-
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
-        loc, scale = params
-
-        scale = funct.softplus(scale)
-        scale = torch.add(scale, 0.00000001)
-
-        distr = LogNormal(loc, scale)
-        return distr.rsample(), [loc, scale]
 
 class VAECategoricalDistr(VAEDistr):
 
@@ -128,6 +143,7 @@ class VariationalLayer(nn.Module):
         self.n_out = n_out
 
         self.linear = nn.Linear(n_in, distr.n_params * n_out)
+
 
     def forward(self, x: Tensor):
 
