@@ -34,7 +34,7 @@ class VAEDistr(ABC):
         return params
 
     @abstractmethod
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
         raise NotImplementedError()
 
     @abstractmethod
@@ -48,7 +48,7 @@ class VAEDistr(ABC):
         :return: The output, and the parameters which were used to sample the output
         """
         params = self.extract_params(x)
-        x, params = self.rsample_from_params(*params)
+        x, params = self.sample_from_params(*params)
         return x, params
 
 
@@ -67,12 +67,12 @@ class VAENormalDistr(VAEDistr):
 
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
         loc, scale = params
-        distr = LogNormal(loc, scale)
+        distr = Normal(loc, scale)
         return distr.log_prob(value)
 
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
         loc, scale = self._transform_params(*params)
-        distr = LogNormal(loc, scale)
+        distr = Normal(loc, scale)
         return distr.rsample(), [loc, scale]
 
 class VAELogNormalDistr(VAENormalDistr):
@@ -80,14 +80,24 @@ class VAELogNormalDistr(VAENormalDistr):
     def __init__(self):
         VAENormalDistr.__init__(self)
 
+    def _transform_params(self, *params) -> List[Tensor]:
+        loc, scale = params
+
+        scale = funct.softplus(scale)
+        scale = torch.add(scale, 0.00000001)
+
+        loc = funct.softplus(loc)
+
+        return [loc, scale]
+
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
         loc, scale = params
-        distr = Normal(loc, scale)
-        return distr.log_prob(value)
+        distr = LogNormal(loc, scale)
+        return distr.log_prob(value + 0.00000001)
 
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
         loc, scale = self._transform_params(*params)
-        distr = Normal(loc, scale)
+        distr = LogNormal(loc, scale)
         return distr.rsample(), [loc, scale]
 
 
@@ -96,18 +106,29 @@ class VAECategoricalDistr(VAEDistr):
     def __init__(self, n_categories):
         VAEDistr.__init__(self, n_categories)
 
-    def rsample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def _transform_params(self, *params) -> Tensor:
         params = torch.stack(params, dim=-1)
         params = funct.softmax(params, dim=-1)
 
-        distr = OneHotCategoricalStraightThrough(probs=params)
-        result = distr.rsample()
+        return params
 
-        categories = torch.arange(0, self.n_params, step=1, dtype=torch.float32).to(params.device)
-        result = result * categories
-        result = torch.sum(result, dim=-1)
+    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+        params = self._transform_params(*params)
+
+        distr = Categorical(probs=params)
+        result = distr.sample()
+
+        # categories = torch.arange(0, self.n_params, step=1, dtype=torch.float32).to(params.device)
+        # result = result * categories
+        # result = torch.sum(result, dim=-1)
 
         return result, [params]
+
+    def log_prob(self, params: List[Tensor], value: Tensor) -> float:
+        params = params[0]
+        distr = Categorical(probs=params)
+
+        return distr.log_prob(value)
 
 
 @dataclass
@@ -182,7 +203,7 @@ class VariationalEncoderLayer(nn.Module):
         loc = torch.zeros(batch_size, *output_shape)
         scale = torch.ones(batch_size, *output_shape)
 
-        x, _ = self._distr.rsample_from_params(loc, scale)
+        x, _ = self._distr.sample_from_params(loc, scale)
 
         x, _ = self._distr.rsample(x)
 

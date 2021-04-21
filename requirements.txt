@@ -20,8 +20,8 @@ matplotlib==3.4.1
 networkx==2.5.1
 numba==0.53.1
 numpy==1.20.2
-orjson==3.5.1
-pandas==1.2.3
+orjson==3.5.2
+pandas==1.2.4
 Pillow==8.2.0
 pycairo==1.20.0
 pyparsing==2.4.7
@@ -36,7 +36,7 @@ six==1.15.0
 threadpoolctl==2.1.0
 torch==1.8.1+cpu
 torch-cluster==1.5.9
-torch-geometric==1.6.3
+torch-geometric==1.7.0
 torch-scatter==2.0.6
 torch-sparse==0.6.9
 torch-spline-conv==1.2.1

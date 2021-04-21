@@ -4,5 +4,6 @@
 /.vscode
 /models
 /generated_data
+/ignore
 __pycache__/**
 *.pyc

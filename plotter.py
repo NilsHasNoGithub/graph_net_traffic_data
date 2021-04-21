@@ -256,6 +256,16 @@ def gen_data_visualization(dataset: LaneVehicleCountDataset, lane_data: Dict[Tup
     drawer.draw_all()
     return drawer.get_surface()
 
+def gen_uncertainty_vizualization(
+        dataset: LaneVehicleCountDataset,
+        variances: Tensor,
+        no_data_intersections: Optional[Set[str]] = None
+) -> cairo.Surface:
+    vars_per_lane = dataset.extract_data_per_lane_per_intersection(variances.squeeze())
+    result = gen_data_visualization(dataset, vars_per_lane, no_data_intersections=no_data_intersections)
+    return result
+
+
 @dataclass
 class IORVizualizations:
     input: cairo.Surface
@@ -270,7 +280,8 @@ def gen_input_output_random_vizualization(
         data_output: Tensor,
         data_random: Tensor,
         no_data_intersections: Optional[Set[str]] = None,
-        scale_data_by_road_len = False
+        scale_data_by_road_len = False,
+        use_same_max_io=False
 ):
     datas = (data_input, data_output, data_random)
     datas = [dataset.extract_data_per_lane_per_intersection(data) for data in datas]
@@ -286,7 +297,10 @@ def gen_input_output_random_vizualization(
 
         datas = datas_scaled
 
-    max_ = max(v for data in datas for v in data.values())
+    if use_same_max_io:
+        max_ = max(v for data in datas[:2] for v in data.values())
+    else:
+        max_ = None
     # max_ = None
 
     io_viss = (gen_data_visualization(dataset, data, no_data_intersections=no_data_intersections, min_=0.0, max_=max_) for data in datas[:2])

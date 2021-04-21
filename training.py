@@ -12,6 +12,7 @@ from torch import nn, Tensor
 
 from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
+from vae_net import VAELogNormalDistr, VAECategoricalDistr, VAEDistr
 import matplotlib.pyplot as plt
 import time
 
@@ -19,6 +20,33 @@ from utils import DEVICE
 from vae_net import VAEEncoderForwardResult
 
 from itertools import product as cart_product
+
+from enum import Enum
+
+
+class SupportedVaeDistr(Enum):
+    LOG_NORMAL = 1
+    CATEGORICAL = 2
+
+    @staticmethod
+    def from_str(s: str):
+        s = s.lower()
+
+        if s == "lognormal":
+            return SupportedVaeDistr.LOG_NORMAL
+        elif s == "categorical":
+            return SupportedVaeDistr.CATEGORICAL
+
+        raise ValueError(f"'{s}' is not a supported distribution")
+
+    def to_distr(self) -> VAEDistr:
+        if self == SupportedVaeDistr.LOG_NORMAL:
+            return VAELogNormalDistr()
+        elif self == SupportedVaeDistr.CATEGORICAL:
+            return VAECategoricalDistr(30)
+
+        raise ValueError(f"Illegal enum state: {self}")
+
 
 @dataclass
 class Args:
@@ -29,6 +57,7 @@ class Args:
     n_epochs: int
     batch_size: int
     p_missing: float
+    vae_distr: Optional[SupportedVaeDistr]
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -39,6 +68,7 @@ def parse_args():
     parser.add_argument("--n-epochs", "-n", type=int, default=100)
     parser.add_argument("--batch-size", "-b", type=int, default=50)
     parser.add_argument("--p-missing", "-p", type=float, default=0.3)
+    parser.add_argument("--vae-distr", type=str, required=False)
 
     parsed = parser.parse_args()
 
@@ -49,7 +79,8 @@ def parse_args():
         parsed.result_dir,
         parsed.n_epochs,
         parsed.batch_size,
-        parsed.p_missing
+        parsed.p_missing,
+        SupportedVaeDistr.from_str(parsed.vae_distr) if parsed.vae_distr else None
     )
 
 @dataclass
@@ -65,7 +96,6 @@ def train(
         val_dl: DataLoader,
         device=None,
         n_epochs: int = 1000,
-        loss_fn_weight: float = 10.0,
         model_file=None
     ):
     """
@@ -79,7 +109,11 @@ def train(
     :param loss_fn_weight: weight to give to the loss function, relative to KL Loss
     :return:
     """
+
+    mse_loss_fn = nn.MSELoss()
+
     train_losses = []
+    mse_train_losses = []
     val_losses = []
 
     if device is None:
@@ -89,6 +123,7 @@ def train(
     for i_epoch in range(n_epochs):
 
         cur_train_loss = 0.0
+        cur_mse_loss = 0.0
         cur_val_loss = 0.0
 
         t = time.time()
@@ -101,12 +136,15 @@ def train(
             optimizer.zero_grad()
 
             output: GNNVAEForwardResult= model(inputs)
+            mse_loss = mse_loss_fn(output.x, targets)
             loss = loss_fn(output, targets)
+
             loss.backward()
 
             optimizer.step()
 
             cur_train_loss += loss.item()
+            cur_mse_loss += mse_loss.item()
 
             t1 = time.time()
             print(
@@ -132,9 +170,10 @@ def train(
                 t = t1
 
         train_losses.append(cur_train_loss / len(train_dl))
+        mse_train_losses.append(cur_mse_loss / len(train_dl))
         val_losses.append(cur_val_loss / len(val_dl))
 
-        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}")
+        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}")
 
         if model_file is not None:
             model.cpu()
@@ -170,8 +209,20 @@ def main():
     if args.model_file is not None and os.path.isfile(args.model_file):
         state = torch.load(args.model_file)
         model = GNNVAEModel.from_model_state(state)
+
+        err_str = "Program argument does not match distribution of loaded model"
+        if args.vae_distr == SupportedVaeDistr.LOG_NORMAL:
+            assert isinstance(model.distr(), VAELogNormalDistr), err_str
+        elif args.vae_distr == SupportedVaeDistr.CATEGORICAL:
+            assert isinstance(model.distr(), VAECategoricalDistr), err_str
     else:
-        model = GNNVAEModel(data_train.input_shape()[1], data_train.graph_adjacency_list(), n_out=data_train.output_shape()[1])
+
+        model = GNNVAEModel(
+            data_train.input_shape()[1],
+            data_train.graph_adjacency_list(),
+            n_out=data_train.output_shape()[1],
+            decoder_distr=args.vae_distr.to_distr() if args.vae_distr is not None else None
+        )
 
     optimizer = torch.optim.Adam(model.parameters())
 

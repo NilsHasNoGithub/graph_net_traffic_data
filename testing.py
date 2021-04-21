@@ -15,7 +15,7 @@ from full_model import GNNVAEModel, GNNVAEForwardResult
 import matplotlib.pyplot as plt
 import time
 
-from plotter import gen_data_visualization, gen_input_output_random_vizualization
+from plotter import gen_data_visualization, gen_input_output_random_vizualization, gen_uncertainty_vizualization
 
 from utils import DEVICE
 
@@ -62,9 +62,11 @@ def main():
     input_shape = dataset.input_shape()
     output_shape = dataset.output_shape()
 
-    y = model(sample.view(1, *input_shape))
+    output = model(sample.view(1, *input_shape))
+
+    params = output.params_decoder
     # y = y.get_output()
-    y = y.x
+    y = output.x
     y = y.view(*output_shape)
 
     random_y = model.sample()
@@ -84,6 +86,12 @@ def main():
     # pars = model.parameters()
 
     print(f"num parameters: {sum(p.numel() for p in model.parameters())}")
+
+    if len(params) == 2:
+        scale = params[1]
+
+        var_result = gen_uncertainty_vizualization(dataset, scale, no_data_intersections=hidden_intersections)
+        var_result.write_to_png("results/variances.png")
 
     ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections, scale_data_by_road_len=True)
 
