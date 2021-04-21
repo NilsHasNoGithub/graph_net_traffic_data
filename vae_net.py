@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as funct
 from torch.tensor import Tensor
-from torch.distributions import Distribution, Categorical, OneHotCategoricalStraightThrough
+from torch.distributions import Distribution, Categorical
 from torch.distributions.normal import Normal
 from torch.distributions.log_normal import LogNormal
 import numpy as np
@@ -41,6 +41,10 @@ class VAEDistr(ABC):
     def log_prob(self, params: List[Tensor], value: Tensor):
         raise NotImplementedError()
 
+    @abstractmethod
+    def torch_distr(self, *params) -> Distribution:
+        raise NotImplementedError()
+
     def rsample(self, x: Tensor) -> Tuple[Tensor, List[Tensor]]:
         """
 
@@ -75,20 +79,13 @@ class VAENormalDistr(VAEDistr):
         distr = Normal(loc, scale)
         return distr.rsample(), [loc, scale]
 
+    def torch_distr(self, *params) -> Distribution:
+        return Normal(*params)
+
 class VAELogNormalDistr(VAENormalDistr):
 
     def __init__(self):
         VAENormalDistr.__init__(self)
-
-    def _transform_params(self, *params) -> List[Tensor]:
-        loc, scale = params
-
-        scale = funct.softplus(scale)
-        scale = torch.add(scale, 0.00000001)
-
-        loc = funct.softplus(loc)
-
-        return [loc, scale]
 
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
         loc, scale = params
@@ -99,6 +96,9 @@ class VAELogNormalDistr(VAENormalDistr):
         loc, scale = self._transform_params(*params)
         distr = LogNormal(loc, scale)
         return distr.rsample(), [loc, scale]
+
+    def torch_distr(self, *params) -> Distribution:
+        return LogNormal(*params)
 
 
 class VAECategoricalDistr(VAEDistr):
@@ -118,10 +118,6 @@ class VAECategoricalDistr(VAEDistr):
         distr = Categorical(probs=params)
         result = distr.sample()
 
-        # categories = torch.arange(0, self.n_params, step=1, dtype=torch.float32).to(params.device)
-        # result = result * categories
-        # result = torch.sum(result, dim=-1)
-
         return result, [params]
 
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
@@ -129,6 +125,10 @@ class VAECategoricalDistr(VAEDistr):
         distr = Categorical(probs=params)
 
         return distr.log_prob(value)
+
+    def torch_distr(self, *params) -> Distribution:
+        params = self._transform_params(*params)
+        return Categorical(probs=params)
 
 
 @dataclass

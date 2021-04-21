@@ -14,6 +14,7 @@ from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
 import matplotlib.pyplot as plt
 import time
+import random
 
 from plotter import gen_data_visualization, gen_input_output_random_vizualization, gen_uncertainty_vizualization
 
@@ -49,10 +50,11 @@ def parse_args():
 def main():
     args = parse_args()
 
-    t = 2000
+
 
     dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
 
+    t = random.randint(0, len(dataset)-1)
     state = torch.load(args.model_file)
     model = GNNVAEModel.from_model_state(state)
 
@@ -87,11 +89,10 @@ def main():
 
     print(f"num parameters: {sum(p.numel() for p in model.parameters())}")
 
-    if len(params) == 2:
-        scale = params[1]
+    distr = model.distr().torch_distr(*params)
 
-        var_result = gen_uncertainty_vizualization(dataset, scale, no_data_intersections=hidden_intersections)
-        var_result.write_to_png("results/variances.png")
+    var_result = gen_uncertainty_vizualization(dataset, distr.variance, no_data_intersections=hidden_intersections)
+    var_result.write_to_png("results/variances.png")
 
     ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections, scale_data_by_road_len=True)
 

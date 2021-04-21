@@ -12,7 +12,7 @@ from torch import nn, Tensor
 
 from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
-from vae_net import VAELogNormalDistr, VAECategoricalDistr, VAEDistr
+from vae_net import VAELogNormalDistr, VAECategoricalDistr, VAEDistr, VAENormalDistr
 import matplotlib.pyplot as plt
 import time
 
@@ -26,7 +26,8 @@ from enum import Enum
 
 class SupportedVaeDistr(Enum):
     LOG_NORMAL = 1
-    CATEGORICAL = 2
+    NORMAL = 2
+    CATEGORICAL = 3
 
     @staticmethod
     def from_str(s: str):
@@ -34,6 +35,8 @@ class SupportedVaeDistr(Enum):
 
         if s == "lognormal":
             return SupportedVaeDistr.LOG_NORMAL
+        elif s == "normal":
+            return SupportedVaeDistr.NORMAL
         elif s == "categorical":
             return SupportedVaeDistr.CATEGORICAL
 
@@ -42,6 +45,8 @@ class SupportedVaeDistr(Enum):
     def to_distr(self) -> VAEDistr:
         if self == SupportedVaeDistr.LOG_NORMAL:
             return VAELogNormalDistr()
+        elif self == SupportedVaeDistr.NORMAL:
+            return VAENormalDistr()
         elif self == SupportedVaeDistr.CATEGORICAL:
             return VAECategoricalDistr(30)
 
@@ -186,7 +191,7 @@ def train(
     )
 
 
-def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
+def mk_loss_fn(model: GNNVAEModel, log_prob_weight=1000.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
         return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
 
