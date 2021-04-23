@@ -4,6 +4,7 @@ from typing import AnyStr, Optional, List, Callable
 import argparse
 import os
 import torch
+from torch.distributions import Categorical
 from torch.optim import Optimizer
 
 from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing
@@ -91,7 +92,14 @@ def main():
 
     distr = model.distr().torch_distr(*params)
 
-    var_result = gen_uncertainty_vizualization(dataset, distr.variance, no_data_intersections=hidden_intersections)
+    if isinstance(distr, Categorical):
+        probs = params[0]
+        vars = - 1.0 * (probs * torch.log2(probs)).sum(-1)
+        # vars = distr.entropy()
+    else:
+        vars = distr.variance
+
+    var_result = gen_uncertainty_vizualization(dataset, vars, no_data_intersections=hidden_intersections)
     var_result.write_to_png("results/variances.png")
 
     ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections, scale_data_by_road_len=True)

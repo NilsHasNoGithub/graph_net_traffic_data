@@ -59,7 +59,8 @@ class GNNVAEModel(nn.Module):
         if n_out is None:
             n_out = n_features
 
-        sizes = [n_features, int(n_features * (5 / 6)), int(n_features * (2 / 3)), int(n_features * (1 / 2))]
+        # sizes = [n_features, int(n_features * (5 / 6)), int(n_features * (2 / 3)), int(n_features * (1 / 2))]
+        sizes = [n_features] * 4
 
         if n_hidden is None:
             n_hidden = sizes[-1]
