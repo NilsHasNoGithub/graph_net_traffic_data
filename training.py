@@ -191,9 +191,9 @@ def train(
     )
 
 
-def mk_loss_fn(model: GNNVAEModel, log_prob_weight=1000.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
+def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
-        return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
+        return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob([result.params_decoder[0], 0.02], targets))
 
     return loss_fn
 

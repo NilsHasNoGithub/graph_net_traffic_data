@@ -90,12 +90,12 @@ class VAELogNormalDistr(VAENormalDistr):
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
         loc, scale = params
         distr = LogNormal(loc, scale)
-        return distr.log_prob(value + 0.00000001)
+        return distr.log_prob(value + 10)
 
     def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
         loc, scale = self._transform_params(*params)
         distr = LogNormal(loc, scale)
-        return distr.rsample(), [loc, scale]
+        return distr.rsample() - 10, [loc, scale]
 
     def torch_distr(self, *params) -> Distribution:
         return LogNormal(*params)
