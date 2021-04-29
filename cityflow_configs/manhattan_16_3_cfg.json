@@ -4,7 +4,7 @@
   "dir": "./",
   "roadnetFile": "sample-code/data/manhattan_16x3/roadnet_16_3.json",
   "flowFile": "sample-code/data/manhattan_16x3/anon_16_3_newyork_real.json",
-  "rlTrafficLight": false,
+  "rlTrafficLight": true,
   "saveReplay": true,
   "roadnetLogFile": "logs/roadnet.json",
   "replayLogFile": "logs/replay.txt"

@@ -66,7 +66,7 @@ class GNNVAEModel(nn.Module):
             n_hidden = sizes[-1]
 
         if decoder_distr is None:
-            decoder_distr = VAELogNormalDistr()
+            decoder_distr = VAECategoricalDistr(30)
 
         self._n_hidden = n_hidden
         self._n_out = n_out

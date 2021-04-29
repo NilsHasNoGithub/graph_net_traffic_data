@@ -32,7 +32,7 @@ class LaneVehicleCountDataset(Dataset):
         return LaneVehicleCountDataset(graph, data, **kwargs)
 
     @staticmethod
-    def _data_pre_process(graph: RoadnetGraph, data: List[Dict], scale_by_road_len: bool) -> List[Dict[str, Dict[str, float]]]:
+    def _data_pre_process(graph: RoadnetGraph, data: List[Dict], scale_by_road_len: bool) -> List[Dict[str, Dict[str, Dict[str, float]]]]:
         intersections = graph.intersection_list()
 
         result = []
@@ -46,9 +46,15 @@ class LaneVehicleCountDataset(Dataset):
                 for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes:
                     i_lane_data[lane_id] = 0.0
 
-                new_data_t[intersection.id] = i_lane_data
+                new_data_t[intersection.id] = {}
+                new_data_t[intersection.id]["laneVehicleInfos"] = i_lane_data
+
 
             lane_car_infos: Dict[str, Dict] = data_t["laneVehicleInfos"]
+            phase_infos: Dict[str, int] = data_t["intersectionPhases"]
+
+            for k, v in phase_infos.items():
+                new_data_t[k]["phase"] = v
 
             # For each car, increment lane count of the closest intersection
             for lane_id, car_infos in lane_car_infos.items():
@@ -57,7 +63,7 @@ class LaneVehicleCountDataset(Dataset):
 
                     # Edge intersections are not included in graph
                     try:
-                        new_data_t[closest_intersection][lane_id] += 1.0
+                        new_data_t[closest_intersection]["laneVehicleInfos"][lane_id] += 1.0
                     except KeyError:
                         pass
 
@@ -69,7 +75,7 @@ class LaneVehicleCountDataset(Dataset):
                     for road in intersection.incoming_roads + intersection.outgoing_roads:
                         for lane_id in road.lanes:
                             try:
-                                data_t[intersection.id][lane_id] /= road.length() / 2
+                                data_t[intersection.id]["laneVehicleInfos"][lane_id] /= road.length() / 2
                             except KeyError:
                                 pass
 
@@ -106,8 +112,8 @@ class LaneVehicleCountDataset(Dataset):
         for data_t in self._data:
             result = []
             for intersection in self._graph.intersection_list():
-                counts_incoming = [data_t[intersection.id][lane_id] for lane_id in intersection.incoming_lanes]
-                counts_outgoing = [data_t[intersection.id][lane_id] for lane_id in intersection.outgoing_lanes]
+                counts_incoming = [data_t[intersection.id]["laneVehicleCounts"][lane_id] for lane_id in intersection.incoming_lanes]
+                counts_outgoing = [data_t[intersection.id]["laneVehicleCounts"][lane_id] for lane_id in intersection.outgoing_lanes]
 
                 result.append(counts_incoming + counts_outgoing)
             yield result
@@ -117,7 +123,7 @@ class LaneVehicleCountDataset(Dataset):
         result = []
 
         for intersection in self._graph.intersection_list():
-            intersection_data = self._data[t][intersection.id]
+            intersection_data = self._data[t][intersection.id]["laneVehicleInfos"]
 
             counts = [intersection_data[lane_id] for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes]
 
@@ -131,7 +137,7 @@ class LaneVehicleCountDataset(Dataset):
 
         for intersection in self._graph.intersection_list():
             for lane in intersection.incoming_lanes + intersection.outgoing_lanes:
-                counts[lane] += self._data[t][intersection.id][lane]
+                counts[lane] += self._data[t][intersection.id]["laneVehicleCounts"][lane]
 
         return counts
 
@@ -180,6 +186,7 @@ class LaneVehicleCountDataset(Dataset):
 @dataclass
 class TimeStepDataMissing:
     is_missing: bool
+    phase: int
     data: Dict
 
 class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
@@ -204,7 +211,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
 
         new_data_t = {}
         for intersection in intersections:
-            data_t_i = data_t[intersection.id]
+            data_t_i = data_t[intersection.id]["laneVehicleInfos"]
             is_missing = random.random() < p_missing
 
             if is_missing:
@@ -212,7 +219,9 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             else:
                 intersection_data = data_t_i
 
-            new_data_t[intersection.id] = TimeStepDataMissing(is_missing, intersection_data)
+            phase = data_t[intersection.id]["phase"]
+
+            new_data_t[intersection.id] = TimeStepDataMissing(is_missing, phase, intersection_data)
 
         return new_data_t
 
@@ -252,7 +261,11 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             counts = [intersection_data.data[lane_id] for lane_id in
                       intersection.incoming_lanes + intersection.outgoing_lanes]
 
-            inputs.append([1.0 if intersection_data.is_missing else 0.0] + counts)
+            phase_one_hot = [0] * 5
+
+            phase_one_hot[intersection_data.phase] = 1
+
+            inputs.append([1.0 if intersection_data.is_missing else 0.0] + phase_one_hot + counts)
 
         if return_hidden_intersections:
             hidden_intersections = {i_id for (i_id, i_data) in data_t.items() if i_data.is_missing}

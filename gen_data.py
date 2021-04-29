@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from typing import AnyStr, Dict, List, Any, Optional
 import argparse
 
+from agent import Agent, MaxPressureAgent
 from roadnet_graph import RoadnetGraph
 from utils import store_json, load_json, Point, store_pkl
 import random
+
 
 
 N_STEPS = 3600
@@ -59,7 +61,7 @@ class CarInfo:
 
 
 
-def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph) -> dict:
+def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optional[List[Agent]]=None) -> dict:
     vh_counts = engine.get_lane_vehicle_count()
     lane_vhs = engine.get_lane_vehicles()
 
@@ -69,23 +71,35 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph) -> dict:
         car_infos = (CarInfo.from_engine(engine, graph, vh_id) for vh_id in vhs)
         lane_vh_infos[lane_id] = [{"id": ci.id, "closestIntersection": ci.closest_intersection_id} for ci in car_infos]
 
+    intersection_phases = {}
+
+    if agents is not None:
+        for agent in agents:
+            intersection_phases[agent.get_intersection().id] = agent.get_prev_phase()
+
+
     return {
         "laneCounts": vh_counts,
-        "laneVehicleInfos": lane_vh_infos
+        "laneVehicleInfos": lane_vh_infos,
+        "intersectionPhases": intersection_phases
     }
 
 
 
 
-def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, reset_pre=True, reset_post=True) -> List[Dict[str, Any]]:
+def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, agents: Optional[List[Agent]]=None, reset_pre=True, reset_post=True) -> List[Dict[str, Any]]:
     if reset_pre:
         engine.reset()
 
     data = []
 
     for _ in range(n_steps):
+        step_data = gather_step_data(engine, graph, agents=agents)
+
+        for agent in agents:
+            agent.act(engine, step_data)
+
         engine.next_step()
-        step_data = gather_step_data(engine, graph)
 
         data.append(step_data)
 
@@ -106,9 +120,16 @@ def main(args: Args = None):
 
     graph = RoadnetGraph(cityflow_cfg["roadnetFile"])
 
+    use_rl = cityflow_cfg["rlTrafficLight"]
+
     engine = cityflow.Engine(config_file=args.cfg_file, thread_num=multiprocessing.cpu_count())
 
-    data = collect_data(engine, graph, N_STEPS)
+
+    agents = None
+    if use_rl:
+        agents = [MaxPressureAgent(intersection) for intersection in graph.intersection_list()]
+
+    data = collect_data(engine, graph, N_STEPS, agents=agents)
 
     store_json(data, args.out_file)
     if args.shuffle_file is not None:
