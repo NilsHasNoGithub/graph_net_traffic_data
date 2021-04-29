@@ -143,7 +143,6 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, res
 
             t_since_last_change[intersection.id][0] += 1
 
-            # TODO: Add randomness epsilon
             if t_since_last_change[intersection.id][0] >= T_MIN:
                 # Change the phase only when T-minus has been surpassed
                 engine.set_tl_phase(intersection.id, chosen_phase_id)
