@@ -97,7 +97,7 @@ class GNNVAEModel(nn.Module):
 
     def sample(self):
 
-       x = self._variational_encoder.random_output([len(self._adj_list), self._n_out])
+       x = self._variational_encoder.random_output([len(self._adj_list), self._n_hidden])
 
        x = self._gnn_decoder(x, self._edges)
 

@@ -209,6 +209,6 @@ class VariationalEncoderLayer(nn.Module):
 
         x, _ = self._distr.sample_from_params(loc, scale)
 
-        x, _ = self._distr.rsample(x)
+        # x, _ = self._distr.rsample(x)
 
         return x
