@@ -197,6 +197,13 @@ class RoadnetGraph:
         """
         return self._road_list
 
+
+    def incoming_edge_roads(self) -> List[Road]:
+        return [r for r in self._road_list if r.start_intersection_id not in self._intersection_dict.keys()]
+
+    def outgoing_edge_roads(self) -> List[Road]:
+        return [r for r in self._road_list if r.end_intersection_id not in self._intersection_dict.keys()]
+
     def intersection_dict(self) -> Dict[str, Intersection]:
         return self._intersection_dict
 

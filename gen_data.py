@@ -13,7 +13,7 @@ import random
 
 
 
-N_STEPS = 3600
+N_STEPS = 10_000
 
 @dataclass
 class Args:
@@ -87,13 +87,13 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optio
 
 
 
-def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, agents: Optional[List[Agent]]=None, reset_pre=True, reset_post=True) -> List[Dict[str, Any]]:
+def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, agents: Optional[List[Agent]]=None, reset_pre=True, reset_post=True, print_info=True) -> List[Dict[str, Any]]:
     if reset_pre:
         engine.reset()
 
     data = []
 
-    for _ in range(n_steps):
+    for i_step in range(n_steps):
         step_data = gather_step_data(engine, graph, agents=agents)
 
         for agent in agents:
@@ -101,7 +101,13 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, age
 
         engine.next_step()
 
+        if print_info:
+            print(f"\r i: {i_step}, avg travel time: " + str(engine.get_average_travel_time()), end="")
+
         data.append(step_data)
+
+        if len(engine.get_vehicles(True)) == 0:
+            break
 
     if reset_post:
         engine.reset()

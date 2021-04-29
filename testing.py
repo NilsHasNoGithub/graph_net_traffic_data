@@ -51,8 +51,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-
-
     dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
 
     t = random.randint(0, len(dataset)-1)
