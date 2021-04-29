@@ -11,7 +11,7 @@ from roadnet_graph import RoadnetGraph
 from utils import store_json, load_json, Point, store_pkl
 import random
 
-N_STEPS = 1000  # Previously 3600
+N_STEPS = 3600  # Previously 3600
 
 
 @dataclass
@@ -91,11 +91,18 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, res
             # Get ordered counts of incoming and outgoing lanes.
             incoming_counts = []
             outgoing_counts = []
-            for incoming_lane in intersection.incoming_lanes:
-                incoming_counts.append(
-                    temp_data['laneCounts'][incoming_lane])  # Ordered based on left, down, up , right
-            for outgoing_lane in intersection.outgoing_lanes:
-                outgoing_counts.append(temp_data['laneCounts'][outgoing_lane])
+
+            # Get densities for MaxPressure calculations
+            for incoming_road in intersection.incoming_roads:
+                road_length = incoming_road.length()
+                for incoming_lane in incoming_road.lanes:
+                    incoming_counts.append(temp_data['laneCounts'][incoming_lane] / road_length)
+
+            for outgoing_road in intersection.outgoing_roads:
+                road_length = outgoing_road.length()
+                for outgoing_lane in outgoing_road.lanes:
+                    outgoing_counts.append(temp_data['laneCounts'][outgoing_lane] / road_length)
+
 
             # TODO: Put in an RL class file.
             # MaxPressure algo: https://arxiv.org/pdf/1904.08117.pdf
@@ -128,10 +135,21 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, res
             phase_4 = north_east_count + south_west_count
 
             all_phases = [phase_1, phase_2, phase_3, phase_4]
-            chosen_phase_id = np.argmax(all_phases) + 1  # +1 because phase 0 is all red (except sides).
 
-            # TODO: Add randomness epsilon
-            engine.set_tl_phase(intersection.id, chosen_phase_id)
+            if random.random() < EPSILON:
+                chosen_phase_id = random.randrange(0, len(all_phases))  # Choose random action
+            else:
+                chosen_phase_id = np.argmax(all_phases) + 1  # Choose "best" action
+
+            t_since_last_change[intersection.id][0] += 1
+
+            if t_since_last_change[intersection.id][0] >= T_MIN:
+                # Change the phase only when T-minus has been surpassed
+                engine.set_tl_phase(intersection.id, chosen_phase_id)
+
+                # If we have a new phase, reset the timer.
+                if chosen_phase_id != t_since_last_change[intersection.id][1]:
+                    t_since_last_change[intersection.id] = [0, chosen_phase_id]
 
         engine.next_step()
         step_data = gather_step_data(engine, graph)
