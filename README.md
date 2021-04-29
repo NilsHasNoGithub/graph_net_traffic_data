@@ -9,6 +9,8 @@ python gen_data.py \
    -o generated_data/manhattan_16_3_data.json 
 ```
 
+Disclaimer: First make the `generated_data` folder before trying to write to it, otherwise it will not work.
+
 ## Train on manhattan data set:
 ```
 python training.py \
