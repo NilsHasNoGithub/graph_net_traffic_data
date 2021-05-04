@@ -6,9 +6,10 @@ import os
 import torch
 from torch.optim import Optimizer
 
-from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing
+from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing, RandData
 from torch.utils.data import DataLoader
 from torch import nn, Tensor
+from torch.nn import functional
 
 from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
@@ -191,10 +192,12 @@ def train(
     )
 
 
-def mk_loss_fn(model: GNNVAEModel, log_prob_weight=100.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
+def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEForwardResult, Tensor], Tensor]:
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
-        # Categorical(params).log_prob(targets)
+
         return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
+        # return result.kl_div + log_prob_weight * functional.mse_loss(result.x, targets)
+
 
     return loss_fn
 
@@ -206,7 +209,8 @@ def main():
 
     p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
 
-    data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
+    # data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
+    data_train, data_test = RandData(args.roadnet_file), RandData(args.roadnet_file, size=500)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)

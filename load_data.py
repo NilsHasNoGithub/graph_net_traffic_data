@@ -83,7 +83,7 @@ class LaneVehicleCountDataset(Dataset):
 
 
     def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, scale_by_road_len=False):
-        assert len(data) > 5, "data should contain at least 5 elements"
+        # assert len(data) > 5, "data should contain at least 5 elements"
         i_split = int(0.8*len(data))
 
         data = data[:i_split] if train else data[i_split:]
@@ -233,7 +233,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def output_shape(self) -> torch.Size:
         return self[0][1].shape
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution]]=None, scale_by_road_len=False):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution, float]]=None, scale_by_road_len=False):
         LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size, scale_by_road_len=scale_by_road_len)
 
         if p_missing is None:
@@ -261,9 +261,9 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             counts = [intersection_data.data[lane_id] for lane_id in
                       intersection.incoming_lanes + intersection.outgoing_lanes]
 
-            phase_one_hot = [0] * 5
+            phase_one_hot = [0.0] * 5
 
-            phase_one_hot[intersection_data.phase] = 1
+            phase_one_hot[int(intersection_data.phase)] = 1.0
 
             inputs.append([1.0 if intersection_data.is_missing else 0.0] + phase_one_hot + counts)
 
@@ -294,6 +294,35 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def __getitem__(self, item):
 
         return self.get_item(item)
+
+
+class RandData(LaneVehicleCountDatasetMissing):
+
+    def __init__(self, road_net_file, p_missing=0.5, size=10_000):
+        graph = RoadnetGraph(road_net_file)
+
+        data = []
+
+        for _ in range(size):
+
+
+
+            data_t = {}
+            for intersection in graph.intersection_list():
+
+                num = float(random.randint(0, 29))
+
+                data_t[intersection.id] = {}
+                data_t[intersection.id]["laneVehicleInfos"] = {}
+                data_t[intersection.id]["phase"] = 0
+
+                for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes:
+                    data_t[intersection.id]["laneVehicleInfos"][lane_id] = num
+
+            data.append(data_t)
+
+        LaneVehicleCountDatasetMissing.__init__(self, graph, [], p_missing=p_missing)
+        self._data = data
 
 
 if __name__ == "__main__":

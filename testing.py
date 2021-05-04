@@ -7,9 +7,10 @@ import torch
 from torch.distributions import Categorical
 from torch.optim import Optimizer
 
-from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing
+from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing, RandData
 from torch.utils.data import DataLoader
 from torch import nn
+from torch.nn import functional
 
 from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
@@ -17,7 +18,7 @@ import matplotlib.pyplot as plt
 import time
 import random
 
-from plotter import gen_data_visualization, gen_input_output_random_vizualization, gen_uncertainty_vizualization
+from plotter import gen_data_visualization, gen_input_output_error_random_vizualization, gen_uncertainty_vizualization
 
 from utils import DEVICE
 
@@ -51,7 +52,11 @@ def parse_args():
 def main():
     args = parse_args()
 
-    dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
+    def o_file(name):
+        return os.path.join(args.result_dir, name)
+
+    # dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
+    dataset, _ = RandData(args.roadnet_file), RandData(args.roadnet_file)
 
     t = random.randint(0, len(dataset)-1)
     state = torch.load(args.model_file)
@@ -63,22 +68,22 @@ def main():
     input_shape = dataset.input_shape()
     output_shape = dataset.output_shape()
 
-    output = model(sample.view(1, *input_shape))
+    output: GNNVAEForwardResult = model(sample.view(1, *input_shape))
 
     params = output.params_decoder
     # y = y.get_output()
     y = output.x
     y = y.view(*output_shape)
 
-    random_y = model.sample()
-    # random_y = random_y.get_output()
-    random_y = random_y.x
-    random_y = random_y.view(*output_shape)
+    # random_y = model.sample()
+    # # random_y = random_y.get_output()
+    # random_y = random_y.x
+    # random_y = random_y.view(*output_shape)
 
     #
     torch.set_printoptions(edgeitems=100000)
 
-    print(f"MSE loss: {loss_fn(y, target)}")
+    # print(f"MSE loss: {loss_fn(y, target)}")
 
 
     # print(sample[22,:])
@@ -97,18 +102,58 @@ def main():
     else:
         vars = distr.variance
 
+        # xs = []
+        # for _ in range(1000):
+        #     output = model(sample.view(1, *input_shape))
+        #     xs.append(output.x)
+        #
+        # xs = torch.stack(xs, dim=-1)
+        # vars = torch.var(xs, dim=-1)
+
     var_result = gen_uncertainty_vizualization(dataset, vars, no_data_intersections=hidden_intersections)
-    var_result.write_to_png("results/variances.png")
+    var_result.write_to_png(o_file("variances.png"))
 
-    ior_result = gen_input_output_random_vizualization(dataset, target, y, random_y, no_data_intersections=hidden_intersections, scale_data_by_road_len=True)
+    hidden_intersections_idxs = sample[:, 0].long() == 1
 
-    ior_result.input.write_to_png("results/input.png")
-    ior_result.output.write_to_png("results/output.png")
-    ior_result.random.write_to_png("results/random.png")
+    hidden_out = y[hidden_intersections_idxs]
+    hidden_target = target[hidden_intersections_idxs]
 
-    # input_names = ['Original']
-    # output_names = ['Reconstructed']
-    # torch.onnx.export(model, sample.view(1, *shape), 'results/model.onnx', input_names=input_names, output_names=output_names)
+    hidden_mse = functional.mse_loss(hidden_out, hidden_target)
+
+    obs_out = y[~hidden_intersections_idxs]
+    obs_target = target[~hidden_intersections_idxs]
+
+    obs_mse = functional.mse_loss(obs_out, obs_target)
+
+    print(f"observed mse: {obs_mse},  hidden mse: {hidden_mse}")
+
+    squared_errors = (y - target) ** 2
+
+    ior_result = gen_input_output_error_random_vizualization(dataset, target, y, squared_errors, torch.ones(target.shape), no_data_intersections=hidden_intersections, scale_data_by_road_len=True)
+
+    ior_result.input.write_to_png(o_file("input.png"))
+    ior_result.output.write_to_png(o_file("output.png"))
+    ior_result.error.write_to_png(o_file("errors.png"))
+    ior_result.random.write_to_png(o_file("random.png"))
+
+    enc_loc, enc_scale = output.params_encoder
+
+    enc_loc = enc_loc.squeeze()
+    enc_scale = enc_scale.squeeze()
+
+    enc_loc_hid, enc_loc_obs = enc_loc[hidden_intersections_idxs], enc_loc[~hidden_intersections_idxs]
+    enc_scale_hid, enc_scale_obs = enc_scale[hidden_intersections_idxs], enc_scale[~hidden_intersections_idxs]
+
+    enc_loc_hid, enc_loc_obs, enc_scale_hid, enc_scale_obs = (x.flatten().detach().numpy() for x in (enc_loc_hid, enc_loc_obs, enc_scale_hid, enc_scale_obs))
+
+    plt.clf()
+    plt.title("Mean and standard deviation of parameters in latent space")
+    plt.scatter(enc_loc_hid, enc_scale_hid, label="unobserved")
+    plt.scatter(enc_loc_obs, enc_scale_obs, label="observed")
+    plt.xlabel("Mean")
+    plt.ylabel("Standard deviation")
+    plt.legend()
+    plt.savefig(o_file("encoder_params.png"))
 
 
     # print(torch.round(model.sample()))

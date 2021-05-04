@@ -45,15 +45,27 @@ class VAEDistr(ABC):
     def torch_distr(self, *params) -> Distribution:
         raise NotImplementedError()
 
-    def rsample(self, x: Tensor) -> Tuple[Tensor, List[Tensor]]:
+    @abstractmethod
+    def predict(self, *processed_params):
+        raise NotImplementedError()
+
+    def rsample(self, x: Tensor, n=1) -> Tuple[Tensor, List[Tensor]]:
         """
 
         :param x:
         :return: The output, and the parameters which were used to sample the output
         """
         params = self.extract_params(x)
-        x, params = self.sample_from_params(*params)
+        xs = []
+        for i in range(n):
+            x, params = self.sample_from_params(*params)
+            xs.append(x)
+
+        x = torch.stack(xs, dim=1)
+
         return x, params
+
+
 
 
 class VAENormalDistr(VAEDistr):
@@ -82,6 +94,10 @@ class VAENormalDistr(VAEDistr):
     def torch_distr(self, *params) -> Distribution:
         return Normal(*params)
 
+    def predict(self, *processed_params):
+        loc, _ = processed_params
+        return loc
+
 class VAELogNormalDistr(VAENormalDistr):
 
     def __init__(self):
@@ -99,6 +115,10 @@ class VAELogNormalDistr(VAENormalDistr):
 
     def torch_distr(self, *params) -> Distribution:
         return LogNormal(*params)
+
+    def predict(self, *processed_params):
+        loc, scale = processed_params
+        return torch.exp(loc - scale ** 2)
 
 
 class VAECategoricalDistr(VAEDistr):
@@ -129,6 +149,10 @@ class VAECategoricalDistr(VAEDistr):
     def torch_distr(self, *params) -> Distribution:
         params = self._transform_params(*params)
         return Categorical(probs=params)
+
+    def predict(self, *processed_params):
+        probs = processed_params[0]
+        return torch.argmax(probs, dim=-1)
 
 
 @dataclass
@@ -172,6 +196,11 @@ class VariationalLayer(nn.Module):
 
         x, params = self.distr.rsample(x)
 
+        for i in range(len(params)):
+            params[i] = torch.mean(params[i], dim=1)
+
+        x = self.distr.predict(*params)
+
         return VAEDecoderForwardResult(x, params)
 
 
@@ -187,18 +216,20 @@ class VariationalEncoderLayer(nn.Module):
 
         self.linear = nn.Linear(n_in, self._distr.n_params * n_out)
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor, n=1):
 
         x = self.linear(x)
 
-        x, (loc, scale) = self._distr.rsample(x)
+        x, (loc, scale) = self._distr.rsample(x, n=n)
 
-        kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / 2.0 - 0.5
+
+        # kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / 2.0 - 0.5
+        kl_loss = torch.distributions.kl.kl_divergence(Normal(loc, scale), Normal(0, 1))
         kl_loss = torch.sum(kl_loss, -1)
-        kl_loss = torch.sum(kl_loss, -1)
+        # kl_loss = torch.sum(kl_loss, -1)
         kl_loss = torch.mean(kl_loss)
 
-        # kl_loss = nn.KLDivLoss()(Normal(loc, scale), Normal(0, 1))
+
 
         return VAEEncoderForwardResult(x, kl_loss, [loc, scale])
 

@@ -73,7 +73,8 @@ def main():
         start_time = i_epoch * args.epoch_length
         end_time = start_time + args.epoch_length
 
-        interval = args.interval_min + (args.interval_max - args.interval_min) * random.random()
+        interval = random.uniform(args.interval_min, args.interval_max)
+        start_time += random.random() * interval
 
         for route in routes:
             flows.append({
