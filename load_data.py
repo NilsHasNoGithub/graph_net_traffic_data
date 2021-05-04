@@ -310,13 +310,14 @@ class RandData(LaneVehicleCountDatasetMissing):
             data_t = {}
             for intersection in graph.intersection_list():
 
-                num = float(random.randint(0, 29))
+
 
                 data_t[intersection.id] = {}
                 data_t[intersection.id]["laneVehicleInfos"] = {}
                 data_t[intersection.id]["phase"] = 0
 
                 for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes:
+                    num = float(random.randint(0, 29))
                     data_t[intersection.id]["laneVehicleInfos"][lane_id] = num
 
             data.append(data_t)

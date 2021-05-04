@@ -56,7 +56,7 @@ def main():
         return os.path.join(args.result_dir, name)
 
     # dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
-    dataset, _ = RandData(args.roadnet_file), RandData(args.roadnet_file)
+    dataset, _ = RandData(args.roadnet_file, p_missing=args.p_missing), RandData(args.roadnet_file, p_missing=args.p_missing)
 
     t = random.randint(0, len(dataset)-1)
     state = torch.load(args.model_file)
