@@ -6,8 +6,4 @@
 /generated_data
 __pycache__/**
 *.pyc
-<<<<<<< HEAD
 *.venv
-=======
-.venv
->>>>>>> b572502196311e064e878dac53f1827cb72fd3e0
