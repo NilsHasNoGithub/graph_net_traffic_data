@@ -214,7 +214,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             data_t_i = data_t[intersection.id]["laneVehicleInfos"]
             is_missing = random.random() < p_missing
 
-            if is_missing:
+            if is_missing: #TODO insert intersection.id that's right or top
                 intersection_data = {lane_id:0.0 for lane_id in data_t_i.keys()}
             else:
                 intersection_data = data_t_i
@@ -310,14 +310,12 @@ class RandData(LaneVehicleCountDatasetMissing):
             data_t = {}
             for intersection in graph.intersection_list():
 
-                num = float(random.randint(0, 29))
-
                 data_t[intersection.id] = {}
                 data_t[intersection.id]["laneVehicleInfos"] = {}
                 data_t[intersection.id]["phase"] = 0
 
                 for lane_id in intersection.incoming_lanes + intersection.outgoing_lanes:
-                    data_t[intersection.id]["laneVehicleInfos"][lane_id] = num
+                    data_t[intersection.id]["laneVehicleInfos"][lane_id] = float(random.randint(0, 29))
 
             data.append(data_t)
 

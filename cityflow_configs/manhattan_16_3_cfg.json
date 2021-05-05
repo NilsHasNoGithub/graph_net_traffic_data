@@ -3,7 +3,7 @@
   "seed": 0,
   "dir": "./",
   "roadnetFile": "sample-code/data/manhattan_16x3/roadnet_16_3.json",
-  "flowFile": "flows/test_flow.json",
+  "flowFile": "sample-code/data/manhattan_16x3/anon_16_3_newyork_real.json",
   "rlTrafficLight": true,
   "saveReplay": true,
   "roadnetLogFile": "logs/roadnet.json",

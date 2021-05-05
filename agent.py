@@ -22,7 +22,7 @@ class Agent(ABC):
 
 class MaxPressureAgent(Agent):
 
-    def __init__(self, intersection: Intersection, t_min: int = 3, epsilon: float = 0.1):
+    def __init__(self, intersection: Intersection, t_min: int = 3, epsilon: float = 0.9):
         self.intersection = intersection
         self.t_min = t_min
         self.epsilon = epsilon

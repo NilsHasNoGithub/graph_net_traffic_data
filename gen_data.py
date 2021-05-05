@@ -13,7 +13,7 @@ import random
 
 
 
-N_STEPS = 100_000
+N_STEPS = 10
 
 @dataclass
 class Args:

@@ -7,12 +7,68 @@ from dataclasses import dataclass
 
 from torch_geometric.data import Data
 
+from vae_net import VAEDistr
+
 
 @dataclass
 class IntersectionGNNState:
     state_dict: Any
     sizes: List[int]
     adj_list: List[List[int]]
+
+
+class GNNDecoder(nn.Module):
+    def __init__(self, sizes: List[int], adj_list: List[List[int]], aggr="mean"):
+        nn.Module.__init__(self)
+
+        self._fc1 = torch.nn.Linear(sizes[-1], 24)
+        self._gnn = IntersectionGNN(sizes, adj_list)
+
+        self._activation = nn.ReLU()
+        self.n_params = 2
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
+        """
+
+        :param edge_index:
+        :param x: tensor of shape [batch_size, n_intersections, n_features]
+        :return:
+        """
+
+        x = self._gnn(x, edge_index)
+        x = self._fc1(x)
+
+        return x
+
+
+class GNNEncoder(nn.Module):
+    def __init__(self, sizes: List[int], adj_list: List[List[int]], aggr="mean"):
+        nn.Module.__init__(self)
+
+        self._gnn = IntersectionGNN(sizes, adj_list)
+        self._fc1 = torch.nn.Linear(sizes[-1], sizes[-1] * 2)
+        self.final_layer_size = sizes[-1] * 2
+        self._activation = nn.ReLU()
+        self.n_params = 2
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
+        """
+
+        :param edge_index:
+        :param x: tensor of shape [batch_size, n_intersections, n_features]
+        :return:
+        """
+        x = self._gnn(x, edge_index)
+        x = self._fc1(x)
+
+        # Extract params
+        n_dims = len(x.size())
+        *dims, distr_params = x.size()
+        x = x.view(*dims, self.n_params, distr_params // self.n_params)
+
+        params = [x[..., i, :] for i in range(self.n_params)]
+        return params
+
 
 class IntersectionGNN(nn.Module):
 
@@ -61,7 +117,7 @@ class IntersectionGNN(nn.Module):
         self._activation = nn.ReLU()
 
         self._layers = nn.ModuleList(
-            [gnn.GraphConv(in_, out, aggr=aggr) for (in_, out) in zip(sizes[:-1], sizes[1:])]
+            [nn.Linear(in_, out) for (in_, out) in zip(sizes[:-1], sizes[1:])] #[gnn.GraphConv(in_, out, aggr=aggr) for (in_, out) in zip(sizes[:-1], sizes[1:])]
         )
 
         # self._concats = nn.ModuleList(
@@ -75,7 +131,6 @@ class IntersectionGNN(nn.Module):
             self._adj_list
         )
 
-
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
         """
 
@@ -84,7 +139,7 @@ class IntersectionGNN(nn.Module):
         :return:
         """
         for layer in self._layers:
-            x = layer(x, edge_index)
+            x = layer(x)#, edge_index)
             x = self._activation(x)
 
         return x

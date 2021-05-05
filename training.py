@@ -4,12 +4,12 @@ from typing import AnyStr, Optional, List, Callable
 import argparse
 import os
 import torch
+import torch_geometric
 from torch.optim import Optimizer
 
 from load_data import LaneVehicleCountDataset, LaneVehicleCountDatasetMissing, RandData
 from torch.utils.data import DataLoader
 from torch import nn, Tensor
-from torch.nn import functional
 
 from gnn_model import IntersectionGNN
 from full_model import GNNVAEModel, GNNVAEForwardResult
@@ -65,10 +65,12 @@ class Args:
     p_missing: float
     vae_distr: Optional[SupportedVaeDistr]
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--roadnet-file", "-r", type=str, required=True, help="roadnet data file")
-    parser.add_argument("--data-file", "-d", type=str, required=True, help="data file containing the vehicles on each lane at each time point")
+    parser.add_argument("--data-file", "-d", type=str, required=True,
+                        help="data file containing the vehicles on each lane at each time point")
     parser.add_argument("--model-file", "-f", type=str)
     parser.add_argument("--result-dir", "-R", type=str)
     parser.add_argument("--n-epochs", "-n", type=int, default=100)
@@ -89,10 +91,12 @@ def parse_args():
         SupportedVaeDistr.from_str(parsed.vae_distr) if parsed.vae_distr else None
     )
 
+
 @dataclass
 class TrainResults:
     train_losses: List[float]
     val_losses: List[float]
+
 
 def train(
         model: GNNVAEModel,
@@ -103,7 +107,7 @@ def train(
         device=None,
         n_epochs: int = 1000,
         model_file=None
-    ):
+):
     """
 
     :param model:
@@ -121,6 +125,7 @@ def train(
     train_losses = []
     mse_train_losses = []
     val_losses = []
+    mse_val_losses = []
 
     if device is None:
         device = DEVICE
@@ -130,18 +135,18 @@ def train(
 
         cur_train_loss = 0.0
         cur_mse_loss = 0.0
+        cur_val_mse_loss = 0.0
         cur_val_loss = 0.0
 
         t = time.time()
 
         for i, (inputs, targets) in enumerate(train_dl):
-
             inputs = inputs.to(device)
             targets = targets.to(device)
 
             optimizer.zero_grad()
 
-            output: GNNVAEForwardResult= model(inputs)
+            output: GNNVAEForwardResult = model(inputs)
             mse_loss = mse_loss_fn(output.x, targets)
             loss = loss_fn(output, targets)
 
@@ -165,8 +170,10 @@ def train(
 
                 output: GNNVAEForwardResult = model(inputs)
                 loss = loss_fn(output, targets)
+                mse_loss = mse_loss_fn(output.x, targets)
 
                 cur_val_loss += loss.item()
+                cur_val_mse_loss += mse_loss.item()
 
                 t1 = time.time()
                 print(
@@ -177,14 +184,18 @@ def train(
 
         train_losses.append(cur_train_loss / len(train_dl))
         mse_train_losses.append(cur_mse_loss / len(train_dl))
+        mse_val_losses.append(cur_val_mse_loss / len(train_dl))
         val_losses.append(cur_val_loss / len(val_dl))
 
-        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}")
+        print(
+            f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}, mse_val_loss: {mse_val_losses[-1]}")
 
+        """
         if model_file is not None:
             model.cpu()
             torch.save(model.get_model_state(), model_file)
             model.to(device)
+        """
 
     return TrainResults(
         train_losses,
@@ -192,12 +203,11 @@ def train(
     )
 
 
-def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEForwardResult, Tensor], Tensor]:
+def mk_loss_fn(model: GNNVAEModel, log_prob_weight=100.0) -> Callable[[GNNVAEModel, Tensor], Tensor]:
+    MSE_loss = nn.MSELoss()
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
-
-        return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
-        # return result.kl_div + log_prob_weight * functional.mse_loss(result.x, targets)
-
+        # Categorical(params).log_prob(targets)
+        return 0 * result.kl_div + MSE_loss(result.x, targets) # + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
 
     return loss_fn
 
@@ -209,12 +219,16 @@ def main():
 
     p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
 
-    # data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
-    data_train, data_test = RandData(args.roadnet_file), RandData(args.roadnet_file, size=500)
+    # data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file,
+    #                                                                            p_missing=p_intersection_hidden_distr,
+    #                                                                            scale_by_road_len=False)
+
+    data_train, data_test = RandData(args.roadnet_file, p_missing=0.0), RandData(args.roadnet_file, p_missing=0.0)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)
 
+    """
 
     if args.model_file is not None and os.path.isfile(args.model_file):
         state = torch.load(args.model_file)
@@ -233,6 +247,14 @@ def main():
             n_out=data_train.output_shape()[1],
             decoder_distr=args.vae_distr.to_distr() if args.vae_distr is not None else None
         )
+    """
+
+    model = GNNVAEModel(
+        data_train.input_shape()[1],
+        data_train.graph_adjacency_list(),
+        n_out=data_train.output_shape()[1],
+        decoder_distr=args.vae_distr.to_distr() if args.vae_distr is not None else None
+    )
 
     optimizer = torch.optim.Adam(model.parameters())
     # optimizer = torch.optim.Adagrad(model.parameters())
@@ -247,7 +269,6 @@ def main():
         model_file=args.model_file
     )
 
-
     if args.model_file is not None:
         model.cpu()
         torch.save(model.get_model_state(), args.model_file)
@@ -255,7 +276,7 @@ def main():
     if args.result_dir is not None:
         os.makedirs(args.result_dir, exist_ok=True)
 
-        fig = plt.figure(figsize=(10,5))
+        fig = plt.figure(figsize=(10, 5))
 
         p = fig.gca()
 
