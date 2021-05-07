@@ -58,15 +58,20 @@ class IntersectionGNN(nn.Module):
         self._adj_list = adj_list
 
         self._agg = IntersectionGNN._mean_aggregate
-        self._activation = nn.ReLU()
+        # self._activation = nn.Softplus()
+        self._activation = nn.GELU()
 
         self._layers = nn.ModuleList(
             [gnn.GraphConv(in_, out, aggr=aggr) for (in_, out) in zip(sizes[:-1], sizes[1:])]
         )
 
-        # self._concats = nn.ModuleList(
-        #     [nn.Linear(2 * in_, out) for (in_, out) in zip(sizes[:-1], sizes[1:])]
-        # )
+        self._concats = nn.ModuleList(
+            [nn.Linear(2 * in_, out) for (in_, out) in zip(sizes[:-1], sizes[1:])]
+        )
+
+        self._lin_layers = nn.ModuleList(
+            [nn.Linear(in_, out) for (in_, out) in zip(sizes[:-1], sizes[1:])]
+        )
 
     def get_model_state(self):
         return IntersectionGNNState(
@@ -83,8 +88,16 @@ class IntersectionGNN(nn.Module):
         :param x: tensor of shape [batch_size, n_intersections, n_features]
         :return:
         """
-        for layer in self._layers:
+
+        # for layer in self._lin_layers:
+        #     x = layer(x)
+        #     x = self._activation(x)
+        #
+        # return x
+
+        for i, layer in enumerate(self._layers):
             x = layer(x, edge_index)
+
             x = self._activation(x)
 
         return x

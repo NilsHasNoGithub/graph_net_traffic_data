@@ -93,25 +93,29 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, age
 
     data = []
 
-    for i_step in range(n_steps):
-        step_data = gather_step_data(engine, graph, agents=agents)
+    try:
 
-        for agent in agents:
-            agent.act(engine, step_data)
+        for i_step in range(n_steps):
+            step_data = gather_step_data(engine, graph, agents=agents)
 
-        engine.next_step()
+            for agent in agents:
+                agent.act(engine, step_data)
 
-        if print_info:
-            print(f"\r i: {i_step}, avg travel time: " + str(engine.get_average_travel_time()), end="")
+            engine.next_step()
 
-        data.append(step_data)
+            if print_info:
+                print(f"\r i: {i_step}, avg travel time: " + str(engine.get_average_travel_time()), end="")
 
-        if len(engine.get_vehicles(True)) == 0:
-            break
+            data.append(step_data)
 
-    if reset_post:
-        engine.reset()
+            if len(engine.get_vehicles(True)) == 0:
+                break
 
+        if reset_post:
+            engine.reset()
+
+    except KeyboardInterrupt:
+        pass
 
     return data
 

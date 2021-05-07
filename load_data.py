@@ -298,19 +298,15 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
 
 class RandData(LaneVehicleCountDatasetMissing):
 
-    def __init__(self, road_net_file, p_missing=0.5, size=10_000):
+    def __init__(self, road_net_file, p_missing=0.5, size=1_000):
         graph = RoadnetGraph(road_net_file)
 
         data = []
 
         for _ in range(size):
 
-
-
             data_t = {}
             for intersection in graph.intersection_list():
-
-
 
                 data_t[intersection.id] = {}
                 data_t[intersection.id]["laneVehicleInfos"] = {}

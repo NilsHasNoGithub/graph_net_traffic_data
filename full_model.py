@@ -60,7 +60,8 @@ class GNNVAEModel(nn.Module):
             n_out = n_features
 
         # sizes = [n_features, int(n_features * (5 / 6)), int(n_features * (2 / 3)), int(n_features * (1 / 2))]
-        sizes = [n_features] * 4
+        # sizes = [n_features] * 4
+        sizes = [n_features] * 3
 
         if n_hidden is None:
             n_hidden = sizes[-1]
@@ -76,6 +77,7 @@ class GNNVAEModel(nn.Module):
 
         self._gnn_encoder = IntersectionGNN(sizes, adj_list)
         self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_hidden)
+        # self._variational_encoder = VariationalEncoderLayer(sizes[-1], n_out)
         self._gnn_decoder = IntersectionGNN(list(reversed(sizes)), adj_list)
         # Change to not sampling
         self._variational_decoder = VariationalLayer(n_features, n_out, distr=decoder_distr)
@@ -97,7 +99,7 @@ class GNNVAEModel(nn.Module):
 
     def sample(self):
 
-       x = self._variational_encoder.random_output([len(self._adj_list), self._n_hidden])
+       x = self._variational_encoder.random_output([len(self._adj_list),1, self._n_hidden])
 
        x = self._gnn_decoder(x, self._edges)
 
@@ -127,6 +129,8 @@ class GNNVAEModel(nn.Module):
         encoder_result: VAEEncoderForwardResult = self._variational_encoder(x)
 
         x = self._gnn_decoder(encoder_result.x, self._edges)
+        # x = encoder_result.x
+
         decoder_result: VAEDecoderForwardResult = self._variational_decoder(x)
 
         return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, encoder_result.params, decoder_result.params)

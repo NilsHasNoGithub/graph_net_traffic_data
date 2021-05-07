@@ -55,8 +55,8 @@ def main():
     def o_file(name):
         return os.path.join(args.result_dir, name)
 
-    # dataset, _= LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
-    dataset, _ = RandData(args.roadnet_file, p_missing=args.p_missing), RandData(args.roadnet_file, p_missing=args.p_missing)
+    _, dataset = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=args.p_missing, shuffle=False, scale_by_road_len=False)
+    # _, dataset = RandData(args.roadnet_file, p_missing=args.p_missing), RandData(args.roadnet_file, p_missing=args.p_missing)
 
     t = random.randint(0, len(dataset)-1)
     state = torch.load(args.model_file)
@@ -97,7 +97,7 @@ def main():
 
     if isinstance(distr, Categorical):
         probs = params[0]
-        vars = - 1.0 * (probs * torch.log2(probs)).sum(-1)
+        vars = - 1.0 * (probs * torch.log2(probs+ 0.0000000001)).sum(-1)
         # vars = distr.entropy()
     else:
         vars = distr.variance
@@ -148,11 +148,12 @@ def main():
 
     plt.clf()
     plt.title("Mean and standard deviation of parameters in latent space")
-    plt.scatter(enc_loc_hid, enc_scale_hid, label="unobserved")
-    plt.scatter(enc_loc_obs, enc_scale_obs, label="observed")
+    plt.scatter(enc_loc_hid, enc_scale_hid, label="unobserved", alpha=0.5)
+    plt.scatter(enc_loc_obs, enc_scale_obs, label="observed", alpha=0.5)
     plt.xlabel("Mean")
     plt.ylabel("Standard deviation")
     plt.legend()
+    plt.tight_layout()
     plt.savefig(o_file("encoder_params.png"))
 
 

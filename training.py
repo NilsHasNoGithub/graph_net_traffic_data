@@ -120,6 +120,7 @@ def train(
 
     train_losses = []
     mse_train_losses = []
+    mse_val_losses = []
     val_losses = []
 
     if device is None:
@@ -130,6 +131,7 @@ def train(
 
         cur_train_loss = 0.0
         cur_mse_loss = 0.0
+        cur_val_mse_loss = 0.0
         cur_val_loss = 0.0
 
         t = time.time()
@@ -164,9 +166,11 @@ def train(
                 targets = targets.to(device)
 
                 output: GNNVAEForwardResult = model(inputs)
+                mse_loss = mse_loss_fn(output.x, targets)
                 loss = loss_fn(output, targets)
 
                 cur_val_loss += loss.item()
+                cur_val_mse_loss += mse_loss.item()
 
                 t1 = time.time()
                 print(
@@ -178,8 +182,9 @@ def train(
         train_losses.append(cur_train_loss / len(train_dl))
         mse_train_losses.append(cur_mse_loss / len(train_dl))
         val_losses.append(cur_val_loss / len(val_dl))
+        mse_val_losses.append(cur_val_mse_loss / len(val_dl))
 
-        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}")
+        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}, mse_val_loss: {mse_val_losses[-1]}")
 
         if model_file is not None:
             model.cpu()
@@ -195,8 +200,8 @@ def train(
 def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEForwardResult, Tensor], Tensor]:
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
 
-        # return 0* result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
-        return 0*result.kl_div + log_prob_weight * functional.mse_loss(result.x, targets)
+        return result.kl_div + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets).sum(-1))
+        # return result.kl_div  + log_prob_weight * functional.mse_loss(result.x, targets)
 
 
     return loss_fn
@@ -208,9 +213,10 @@ def main():
     # torch.set_num_threads(multiprocessing.cpu_count())
 
     p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
+    # p_intersection_hidden_distr = 0.0
 
     # data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
-    data_train, data_test = RandData(args.roadnet_file), RandData(args.roadnet_file, size=500)
+    data_train, data_test = RandData(args.roadnet_file, p_missing=p_intersection_hidden_distr), RandData(args.roadnet_file, size=500, p_missing=p_intersection_hidden_distr)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)

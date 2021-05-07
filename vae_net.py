@@ -34,7 +34,7 @@ class VAEDistr(ABC):
         return params
 
     @abstractmethod
-    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params, n=1) -> Tuple[Tensor, List[Tensor]]:
         raise NotImplementedError()
 
     @abstractmethod
@@ -56,12 +56,7 @@ class VAEDistr(ABC):
         :return: The output, and the parameters which were used to sample the output
         """
         params = self.extract_params(x)
-        xs = []
-        for i in range(n):
-            x, params = self.sample_from_params(*params)
-            xs.append(x)
-
-        x = torch.stack(xs, dim=1)
+        x, params = self.sample_from_params(*params, n=n)
 
         return x, params
 
@@ -86,10 +81,15 @@ class VAENormalDistr(VAEDistr):
         distr = Normal(loc, scale)
         return distr.log_prob(value)
 
-    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params, n=1) -> Tuple[Tensor, List[Tensor]]:
         loc, scale = self._transform_params(*params)
         distr = Normal(loc, scale)
-        return distr.rsample(), [loc, scale]
+
+        # eps = torch.rand_like(scale)
+        samples = distr.rsample([n])
+        samples = samples.transpose(0, 1)
+
+        return samples, [loc, scale]
 
     def torch_distr(self, *params) -> Distribution:
         return Normal(*params)
@@ -108,10 +108,14 @@ class VAELogNormalDistr(VAENormalDistr):
         distr = LogNormal(loc, scale)
         return distr.log_prob(value + 0.000001)
 
-    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params, n=1) -> Tuple[Tensor, List[Tensor]]:
         loc, scale = self._transform_params(*params)
         distr = LogNormal(loc, scale)
-        return distr.rsample(), [loc, scale]
+
+        samples = distr.rsample([n])
+        samples = samples.transpose(0, 1)
+
+        return samples, [loc, scale]
 
     def torch_distr(self, *params) -> Distribution:
         return LogNormal(*params)
@@ -132,13 +136,15 @@ class VAECategoricalDistr(VAEDistr):
 
         return params
 
-    def sample_from_params(self, *params) -> Tuple[Tensor, List[Tensor]]:
+    def sample_from_params(self, *params, n=1) -> Tuple[Tensor, List[Tensor]]:
         params = self._transform_params(*params)
 
         distr = Categorical(probs=params)
-        result = distr.sample()
 
-        return result, [params]
+        samples = distr.sample([n])
+        samples = samples.transpose(0, 1)
+
+        return samples, [params]
 
     def log_prob(self, params: List[Tensor], value: Tensor) -> float:
         params = params[0]
