@@ -228,14 +228,11 @@ class VariationalEncoderLayer(nn.Module):
 
         x, (loc, scale) = self._distr.rsample(x, n=n)
 
-
         # kl_loss = torch.log(1.0 / scale) + (scale ** 2.0 + loc ** 2.0) / 2.0 - 0.5
         kl_loss = torch.distributions.kl.kl_divergence(Normal(loc, scale), Normal(0, 1))
         kl_loss = torch.sum(kl_loss, -1)
         # kl_loss = torch.sum(kl_loss, -1)
         kl_loss = torch.mean(kl_loss)
-
-
 
         return VAEEncoderForwardResult(x, kl_loss, [loc, scale])
 

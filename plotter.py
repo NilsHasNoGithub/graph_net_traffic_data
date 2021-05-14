@@ -281,7 +281,7 @@ def gen_input_output_error_random_vizualization(
         data_random: Tensor,
         no_data_intersections: Optional[Set[str]] = None,
         scale_data_by_road_len = False,
-        use_same_max_io=False
+        use_same_max_io=True#False
 ):
     datas = (data_input, data_output, squared_errors, data_random)
     datas = [dataset.extract_data_per_lane_per_intersection(data) for data in datas]

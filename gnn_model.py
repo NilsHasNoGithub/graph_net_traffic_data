@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch_geometric.nn as gnn
-import torch.functional as functional
+from torch.nn import functional
 from typing import List, Any
 from dataclasses import dataclass
 
@@ -97,7 +97,7 @@ class IntersectionGNN(nn.Module):
 
         for i, layer in enumerate(self._layers):
             x = layer(x, edge_index)
-
+            # x = functional.dropout(x, training=self.training)
             x = self._activation(x)
 
         return x
