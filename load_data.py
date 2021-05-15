@@ -233,8 +233,10 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
     def output_shape(self) -> torch.Size:
         return self[0][1].shape
 
-    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=True, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution, float]]=None, scale_by_road_len=False):
+    def __init__(self, graph: RoadnetGraph, data: List[Dict[str, int]], train=True, shuffle=False, shuffle_chunk_size=1, p_missing: Optional[Union[Distribution, float]]=None, scale_by_road_len=False):
+        self._original_data = data
         LaneVehicleCountDataset.__init__(self, graph, data, train=train, shuffle=shuffle, shuffle_chunk_size=shuffle_chunk_size, scale_by_road_len=scale_by_road_len)
+
 
         if p_missing is None:
             p_missing = 0.2

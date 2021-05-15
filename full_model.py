@@ -1,8 +1,9 @@
-from typing import List, Union
+from typing import List, Union, Set
 
 import torch
 from torch import nn, Tensor
 from gnn_model import IntersectionGNN
+from roadnet_graph import RoadnetGraph
 from vae_net import VariationalEncoderLayer, VariationalLayer, VAEEncoderForwardResult, VAECategoricalDistr, \
     VAELogNormalDistr, VAEDecoderForwardResult, VAEDistr
 from dataclasses import dataclass
@@ -134,3 +135,6 @@ class GNNVAEModel(nn.Module):
         decoder_result: VAEDecoderForwardResult = self._variational_decoder(x)
 
         return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, encoder_result.params, decoder_result.params)
+
+
+

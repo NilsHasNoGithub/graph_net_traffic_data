@@ -1,6 +1,9 @@
 from dataclasses import dataclass
-from typing import List, AnyStr, Dict, Set, Optional, Iterator
+from typing import List, AnyStr, Dict, Set, Optional, Iterator, Callable
 import cityflow
+import torch
+from collections import defaultdict
+
 from utils import load_json, Point
 
 
@@ -244,6 +247,86 @@ class RoadnetGraph:
             result.append(nbs)
 
         return result
+
+    def tensor_data_from_time_step_data(self, data_t: dict,
+                                        hidden_intersections: Optional[Set[str]]=None) -> torch.Tensor:
+        """
+        Converts a result from gather_step_data to a tensor which can be used as input for the model
+
+        :param data_t: dict with keys ["laneCounts", "laneVehicleInfos", "intersectionPhases"]
+        :param hidden_intersections:
+        :return: tensor which can be used as input for this network
+        """
+        lane_vh_infos = data_t["laneVehicleInfos"]
+        intersection_phases = data_t["intersectionPhases"]
+
+        result = []
+
+        for intersection in self.intersection_list():
+            is_observed = hidden_intersections is None or (intersection.id not in hidden_intersections)
+            lane_counts = []
+
+            for lane in intersection.incoming_lanes + intersection.outgoing_lanes:
+
+                count = 0.0
+                if is_observed:
+                    for car_info in lane_vh_infos[lane]:
+                        if car_info["closestIntersection"] == intersection.id:
+                            count += 1.0
+
+                lane_counts.append(count)
+
+            hidden_feat = 0.0 if is_observed else 1.0
+
+            phase_one_hot = [0.0] * 5
+            phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
+
+            result.append([hidden_feat] + phase_one_hot + lane_counts)
+
+        return torch.Tensor(result)
+
+    def lane_feats_per_intersection_from_tensor(self, tensor: torch.Tensor) -> Dict[str, Dict[str, float]]:
+        result = {}
+
+        for i_intersection, intersection in enumerate(self.intersection_list()):
+            intersection_data = {}
+            for i_lane, lane in enumerate(intersection.incoming_lanes + intersection.outgoing_lanes):
+                intersection_data[lane] = tensor[i_intersection, i_lane].item()
+
+            result[intersection.id] = intersection_data
+
+        return result
+
+    def lane_feats_from_tensor(self, tensor: torch.Tensor, agg: Optional[Callable[[float, float], float]]=None) -> Dict[str, float]:
+        """
+        Combines features from the tensor into a single feature per lane
+
+        :param tensor:
+        :param agg: How features from the lanes are combined, default takes the sum
+        :return:
+        """
+
+        if agg is None:
+            agg = lambda a, b: a + b
+
+        feats_per_intersection = self.lane_feats_per_intersection_from_tensor(tensor)
+
+        result: Dict[str, float] = {}
+
+        for lane_feats in feats_per_intersection.values():
+            for lane_id, feat in lane_feats.items():
+                if lane_id not in result.keys():
+                    result[lane_id] = feat
+                else:
+                    result[lane_id] = agg(feat, result[lane_id])
+
+        return result
+
+
+
+
+
+
 
 if __name__ == '__main__':
     data = load_json("generated_data/manhattan_16_3_data.json")

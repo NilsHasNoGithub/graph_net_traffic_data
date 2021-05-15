@@ -212,8 +212,8 @@ def main():
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
-    # p_intersection_hidden_distr = 0.0
+    # p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
+    p_intersection_hidden_distr = 0.0
 
     data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
     # data_train, data_test = RandData(args.roadnet_file, p_missing=p_intersection_hidden_distr), RandData(args.roadnet_file, size=500, p_missing=p_intersection_hidden_distr)
