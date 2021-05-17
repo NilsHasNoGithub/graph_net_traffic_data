@@ -139,7 +139,7 @@ class IntersectionGNN(nn.Module):
         :return:
         """
         for layer in self._layers:
-            x = layer(x)#, edge_index)
+            x = layer(x) #, edge_index)
             x = self._activation(x)
 
         return x

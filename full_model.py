@@ -2,6 +2,8 @@ from typing import List, Union
 
 import torch
 from torch import nn, Tensor
+from torch_geometric.nn import RENet
+
 from gnn_model import IntersectionGNN, GNNEncoder, GNNDecoder
 from vae_net import VariationalEncoderLayer, VariationalLayer, VAEEncoderForwardResult, VAECategoricalDistr, \
     VAELogNormalDistr, VAEDecoderForwardResult, VAEDistr
@@ -65,13 +67,19 @@ class GNNVAEModel(nn.Module):
             n_out = n_features
 
         # sizes = [n_features, int(n_features * (5 / 6)), int(n_features * (2 / 3)), int(n_features * (1 / 2))]
-        sizes = [n_features] * 2
+        sizes = [n_features, n_features]
 
         if n_hidden is None:
             n_hidden = sizes[-1]
 
         if decoder_distr is None:
             decoder_distr = VAECategoricalDistr(30)
+
+        self._encoder = IntersectionGNN(sizes, adj_list)
+
+        self._layers = nn.ModuleList(
+            [nn.Linear(in_, out) for (in_, out) in zip(sizes[:-1], sizes[1:])]
+        )
 
         self._n_hidden = n_hidden
         self._n_out = n_out
@@ -81,6 +89,12 @@ class GNNVAEModel(nn.Module):
         self._gnn_encoder = GNNEncoder(sizes, adj_list)
         self._gnn_decoder = GNNDecoder(sizes, adj_list) # IntersectionGNN(list(reversed(sizes)), adj_list)
         self._VAE = geomnn.VGAE(self._gnn_encoder, self._gnn_decoder)
+
+        self._renet_encoder = RENet()
+        self._renet_decoder = RENet()
+
+
+        self._activation = nn.ReLU()
 
         # Change to not sampling
         # self._variational_decoder = VariationalLayer(n_features, n_out, distr=decoder_distr)
@@ -124,23 +138,31 @@ class GNNVAEModel(nn.Module):
         # else:
         #     batch_x = x
 
-        # self._VAE.forward(x), self._VAE.kl_loss()
-        z = self._VAE.encode(x, edge_index=self._edges)
+        #for layer in self._layers:
+        #    x = layer(x) #, edge_index)
+        #    x = self._activation(x)
+
+        #x = self._encoder(x, self._edges)
+
+        #return GNNVAEForwardResult(x, 0, None, None)
+        """
+        x = self._VAE.encode(x, edge_index=self._edges)
         kl_div = self._VAE.kl_loss()
-        x = self._VAE.decode(z, edge_index=self._edges)
+        x = self._VAE.decode(x, edge_index=self._edges)
 
         return GNNVAEForwardResult(x, kl_div, None, None)
 
         """
 
 
-        x = self._gnn_encoder(x, self._edges)
+        #x = self._gnn_encoder(x, self._edges)
+        x = self._renet_encoder(x)
 
 
         encoder_result: VAEEncoderForwardResult = self._variational_encoder(x)
 
-        x = self._gnn_decoder(encoder_result.x, self._edges)
+        #x = self._gnn_decoder(encoder_result.x, self._edges)
+        x = self._renet_decoder(x)
         decoder_result: VAEDecoderForwardResult = self._variational_decoder(x)
 
         return GNNVAEForwardResult(decoder_result.x, encoder_result.kl_div, encoder_result.params, decoder_result.params)
-        """

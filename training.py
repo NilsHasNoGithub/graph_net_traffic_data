@@ -207,7 +207,7 @@ def mk_loss_fn(model: GNNVAEModel, log_prob_weight=100.0) -> Callable[[GNNVAEMod
     MSE_loss = nn.MSELoss()
     def loss_fn(result: GNNVAEForwardResult, targets: Tensor):
         # Categorical(params).log_prob(targets)
-        return 0 * result.kl_div + MSE_loss(result.x, targets) # + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
+        return MSE_loss(result.x, targets) # + log_prob_weight * -1.0 * torch.mean(model.distr().log_prob(result.params_decoder, targets))
 
     return loss_fn
 
@@ -223,7 +223,7 @@ def main():
     #                                                                            p_missing=p_intersection_hidden_distr,
     #                                                                            scale_by_road_len=False)
 
-    data_train, data_test = RandData(args.roadnet_file, p_missing=0.0), RandData(args.roadnet_file, p_missing=0.0)
+    data_train, data_test = RandData(args.roadnet_file, p_missing=0.0, size=2000), RandData(args.roadnet_file, p_missing=0.0, size=2000)
 
     train_dl = DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
     val_dl = DataLoader(data_test, batch_size=args.batch_size, shuffle=True)
