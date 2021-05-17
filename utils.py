@@ -1,4 +1,4 @@
-import orjson
+import json as orjson
 import pickle
 from typing import AnyStr, Union, Any
 import torch
