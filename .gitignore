@@ -5,6 +5,8 @@
 /models
 /generated_data
 /ignore
+/log
+/colight/log
 __pycache__/**
 *.pyc
 *.venv

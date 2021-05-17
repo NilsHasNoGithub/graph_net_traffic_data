@@ -239,9 +239,13 @@ class CoLightAgent(RLAgent):
         # [batch,agent,dim]->(reshape)[batch,1,agent,dim]->(tile)[batch,agent,agent,dim]
         neighbor_repr = RepeatVector3D(self.num_agents)(In_agent)
         print("neighbor_repr.shape", neighbor_repr.shape)
+        print("In_neighbor.shape", In_neighbor.shape)
         # [batch,agent,neighbor,agent]x[batch,agent,agent,dim]->[batch,agent,neighbor,dim]
         neighbor_repr = Lambda(lambda x: K.batch_dot(x[0], x[1]))([In_neighbor, neighbor_repr])
+        # neighbor_repr2 = Lambda(lambda x: tf.tensordot(x[0], x[1], axes=[[0,3], [0,3]]))([In_neighbor, neighbor_repr])
+        # print(neighbor_repr.)
         print("neighbor_repr.shape", neighbor_repr.shape)
+        # print("neighbor_repr2.shape", neighbor_repr2.shape)
 
         """attention computation"""
         # multi-head
@@ -257,7 +261,6 @@ class CoLightAgent(RLAgent):
         # [batch,agent,neighbor,dv,nv]->[batch,agent,nv,neighbor,dv]
         print("DEBUG", neighbor_repr_head.shape)
         print("self.num_agents,self.num_neighbors,dv,nv", self.num_agents, self.graph_setting["NEIGHBOR_NUM"], dv, nv)
-        neighbor_repr_head = neighbor_repr_head[1:-1]
         neighbor_repr_head = Reshape((self.num_agents, self.graph_setting["NEIGHBOR_NUM"] + 1, dv, nv))(
             neighbor_repr_head)
         neighbor_repr_head = Lambda(lambda x: K.permute_dimensions(x, (0, 1, 4, 2, 3)))(neighbor_repr_head)

@@ -420,7 +420,6 @@ if __name__ == '__main__':
             raise ValueError("invalid parameters, load_model_dir should not be None when the agent is not trained")
         print("begin to test model")
         player.test()
-
 # simulate
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = '0, 1'
