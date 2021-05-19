@@ -1,11 +1,17 @@
 import json
 import os.path as osp
+from typing import Optional
+
 import cityflow
 
 import numpy as np
 from math import atan2, pi
 import sys
 
+from full_model import GNNVAEModel
+from gen_data import gather_step_data
+from roadnet_graph import  RoadnetGraph
+import torch
 
 def _get_direction(road, out=True):
     if out:
@@ -133,14 +139,17 @@ class World(object):
     Create a CityFlow engine and maintain informations about CityFlow world
     """
 
-    def __init__(self, cityflow_config, thread_num):
+    def __init__(self, cityflow_config, thread_num, gnn_vae: Optional[GNNVAEModel]=None):
         print("building world...")
         self.eng = cityflow.Engine(cityflow_config, thread_num=thread_num)
         with open(cityflow_config) as f:
             cityflow_config = json.load(f)
         self.roadnet = self._get_roadnet(cityflow_config)
+        self.roadnet_graph = RoadnetGraph(cityflow_config["roadnetFile"])
         self.RIGHT = True  # vehicles moves on the right side, currently always set to true due to CityFlow's mechanism
         self.interval = cityflow_config["interval"]
+
+        self._gnn_vae = gnn_vae
 
         # get all non virtual intersections
         self.intersections = [i for i in self.roadnet["intersections"] if not i["virtual"]]
@@ -193,7 +202,8 @@ class World(object):
             "lane_waiting_time_count": self.get_lane_waiting_time_count,
             "lane_delay": self.get_lane_delay,
             "vehicle_trajectory": self.get_vehicle_trajectory,
-            "history_vehicles": self.get_history_vehicles
+            "history_vehicles": self.get_history_vehicles,
+            "auto_encoder_output": self.get_auto_encoder_output
         }
         self.fns = []
         self.info = {}
@@ -203,6 +213,28 @@ class World(object):
         self.history_vehicles = set()
 
         print("world built.")
+
+    def get_auto_encoder_output(self):
+
+        if self._gnn_vae is None:
+            raise Exception("no gnnvae supplied")
+
+        intersection_phases = {i.id:i.current_phase for i in self.intersections}
+
+        step_data = gather_step_data(self.eng, self.roadnet_graph, intersection_phases=intersection_phases)
+        tnsr = self.roadnet_graph.tensor_data_from_time_step_data(step_data)
+        output = self._gnn_vae(tnsr.view(-1, *tnsr.shape))
+        modes = self.roadnet_graph.lane_feats_from_tensor(output.x.view(output.x.shape[1:]))
+        probs = output.params_decoder[0]
+        probs = probs.view(probs.shape[1:])
+        entropies_tnsr = - 1.0 * (probs * torch.log2(probs+ 0.0000000001)).sum(-1)
+        entropies = self.roadnet_graph.lane_feats_from_tensor(entropies_tnsr, agg=lambda a, b: (a+b)/2)
+        #TODO concat mean and entropy
+        result = {}
+        for k in modes.keys():
+            result[k] = [modes[k], entropies[k]]
+
+        return result
 
     def get_pressure(self):
         vehicles = self.eng.get_lane_vehicle_count()

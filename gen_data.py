@@ -3,10 +3,10 @@ import time
 
 import cityflow
 from dataclasses import dataclass
-from typing import AnyStr, Dict, List, Any, Optional
+from typing import AnyStr, Dict, List, Any, Optional, Tuple
 import argparse
 
-from agent import Agent, MaxPressureAgent
+from agents import Agent, MaxPressureAgent
 from roadnet_graph import RoadnetGraph
 from utils import store_json, load_json, Point, store_pkl
 import random
@@ -61,7 +61,7 @@ class CarInfo:
 
 
 
-def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optional[List[Agent]]=None) -> dict:
+def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optional[List[Agent]]=None, intersection_phases: Optional[Dict[str, int]]=None) -> dict:
     vh_counts = engine.get_lane_vehicle_count()
     lane_vhs = engine.get_lane_vehicles()
 
@@ -71,9 +71,8 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optio
         car_infos = (CarInfo.from_engine(engine, graph, vh_id) for vh_id in vhs)
         lane_vh_infos[lane_id] = [{"id": ci.id, "closestIntersection": ci.closest_intersection_id} for ci in car_infos]
 
-    intersection_phases = {}
 
-    if agents is not None:
+    if agents is not None and intersection_phases is not None:
         for agent in agents:
             intersection_phases[agent.get_intersection().id] = agent.get_prev_phase()
 

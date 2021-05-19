@@ -303,7 +303,7 @@ def analyse_vehicle_nums(file_path):
 
 
 if __name__ == "__main__":
-    build_int_intersection_map("sample-code/data/manhattan_16x3/roadnet_16_3.json",
+    build_int_intersection_map("/home/nils/Documents/school/thesis/graph_net_traffic_data/sample-code/data/manhattan_16x3/roadnet_16_3.json",
                                save_dir="syn33.pkl")
     # analyse_type=1
     # # 0 means analyze the vehicle information

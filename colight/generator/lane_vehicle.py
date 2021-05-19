@@ -42,6 +42,11 @@ class LaneVehicleGenerator(BaseGenerator):
         elif average == "all":
             size = 1
         self.ob_length = len(fns) * size
+
+        if "auto_encoder_output" in fns:
+            self.ob_length += size
+
+
         if self.ob_length == 3:
             self.ob_length = 4
 

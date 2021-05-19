@@ -1,0 +1,11 @@
+{
+  "interval": 1.0,
+  "seed": 0,
+  "dir": "./",
+  "roadnetFile": "sample-code/data/atlanta_1x5/roadnet_atlanta.json",
+  "flowFile": "sample-code/data/atlanta_1x5/atlanta.json",
+  "rlTrafficLight": true,
+  "saveReplay": true,
+  "roadnetLogFile": "logs/roadnet.json",
+  "replayLogFile": "logs/replay.txt"
+}

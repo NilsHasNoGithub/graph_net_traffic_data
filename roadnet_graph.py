@@ -177,6 +177,7 @@ class RoadnetGraph:
         self._intersection_to_idx: Dict[Intersection, int] = {}
         self._intersection_dict: Dict[str, Intersection] = {}
 
+        self._phases = set()
 
         for intersection in sorted(self.adj_dict.keys()):
 
@@ -279,7 +280,8 @@ class RoadnetGraph:
             hidden_feat = 0.0 if is_observed else 1.0
 
             phase_one_hot = [0.0] * 5
-            phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
+            self._phases.add(int(intersection_phases[intersection.id]))
+            # phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
 
             result.append([hidden_feat] + phase_one_hot + lane_counts)
 

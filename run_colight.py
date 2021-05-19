@@ -1,9 +1,9 @@
 import gym
-from environment_colight import TSCEnv
-from world import World
-from generator import LaneVehicleGenerator
-from agent.colight_agent import CoLightAgent
-from metric import TravelTimeMetric
+from colight.environment_colight import TSCEnv
+from colight.world import World
+from colight.generator import LaneVehicleGenerator
+from colight.agent.colight_agent import CoLightAgent
+from colight.metric import TravelTimeMetric
 import argparse
 import os
 import numpy as np
@@ -11,7 +11,9 @@ import logging
 from datetime import datetime
 from utils import *
 import pickle
-
+import sys
+import os
+from full_model import  GNNVAEModel
 
 # parse args
 parser = argparse.ArgumentParser(description='Run Example')
@@ -185,22 +187,24 @@ dic_graph_setting = {
     "NODE_DEGREE_NODE": node_degree_node,  # number of adjacent nodes of node
 }
 
+model_file = "models/model_manhattan_categorical_good.pt"
 
 def build(path):
-    world = World(path, thread_num=args.thread)
+    world = World(path, args.thread, GNNVAEModel.from_model_state(torch.load(model_file)))
     # create observation generator, which is used to construct sample
     observation_generators = []
     for node_dict in world.intersections:
         node_id = node_dict.id
         node_id_int = net_node_dict_inter2id[node_id]
         tmp_generator = LaneVehicleGenerator(world,
-                                             node_dict, ["lane_count"],
+                                             # node_dict, ["lane_count"],
+                                             node_dict, ["auto_encoder_output"],
                                              in_only=True,
-                                             average='road')
+                                             average=None)
         observation_generators.append((node_id_int, tmp_generator))
         # if len(observation_generators) == 5:
         #     break
-    sorted(observation_generators,
+    observation_generators = sorted(observation_generators,
            key=lambda x: x[0])  # sorted the ob_generator based on its corresponding id_int, increasingly
 
     # create agent
@@ -408,6 +412,7 @@ class TrafficLightDQN:
 
 
 if __name__ == '__main__':
+    sys.path.append(os.path.realpath(os.path.dirname(__file__)))
     world, colightAgent, env = build(args.config_file)
     player = TrafficLightDQN(world, colightAgent, env , args, logger,file_prefix)
     if args.train_model:

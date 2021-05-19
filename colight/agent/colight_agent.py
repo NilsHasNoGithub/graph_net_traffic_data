@@ -405,8 +405,10 @@ class CoLightAgent(RLAgent):
         return: obersavtion of node, observation of edge
         """
         x_obs = []  # num_agents * lane_nums,
+
         for i in range(len(self.ob_generators)):
-            x_obs.append((self.ob_generators[i][1].generate()) / self.vehicle_max)
+            ob = self.ob_generators[i][1].generate()
+            x_obs.append(ob / self.vehicle_max)
         # construct edge infomation
         x_obs = np.array(x_obs)
         return x_obs
