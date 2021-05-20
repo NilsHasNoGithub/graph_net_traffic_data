@@ -65,14 +65,15 @@ def main():
     loss_fn = nn.MSELoss()
 
     sample, target, hidden_intersections = dataset.get_item(t, return_hidden_intersections=True)
+    print(hidden_intersections)
     input_shape = dataset.input_shape()
     output_shape = dataset.output_shape()
-
     output: GNNVAEForwardResult = model(sample.view(1, *input_shape))
 
     params = output.params_decoder
     # y = y.get_output()
     y = output.x
+    print(y.shape)
     y = y.view(*output_shape)
 
     # random_y = model.sample()

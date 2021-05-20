@@ -17,9 +17,10 @@ python training.py \
     -d generated_data/manhattan_16_3_data.json \
     -r sample-code/data/manhattan_16x3/roadnet_16_3.json \
     -f models/model.pt \
-    -n 350 \
-    -b 50 \ 
-    -R results
+    -n 10 \
+    -b 10 \ 
+    -R results \
+    -vae-distr categorical
 ```
 
 ## Test model on manhattan data set:

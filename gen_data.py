@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import AnyStr, Dict, List, Any, Optional
 import argparse
 
-from agent import Agent, MaxPressureAgent
+from agent import Agent, MaxPressureAgent, FixedTimeAgent
 from roadnet_graph import RoadnetGraph
 from utils import store_json, load_json, Point, store_pkl
 import random
@@ -134,10 +134,7 @@ def main(args: Args = None):
 
     engine = cityflow.Engine(config_file=args.cfg_file, thread_num=multiprocessing.cpu_count())
 
-
-    agents = None
-    if use_rl:
-        agents = [MaxPressureAgent(intersection) for intersection in graph.intersection_list()]
+    agents = [MaxPressureAgent(intersection) for intersection in graph.intersection_list()]
 
     data = collect_data(engine, graph, N_STEPS, agents=agents)
 
