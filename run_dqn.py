@@ -27,7 +27,8 @@ parser.add_argument('--action_interval', type=int, default=20, help='how often a
 parser.add_argument('--episodes', type=int, default=40, help='training episodes')
 parser.add_argument('--save_model', action="store_true", default=False)
 parser.add_argument('--load_model', action="store_true", default=False)
-parser.add_argument("--save_rate", type=int, default=20, help="save model once every time this many episodes are completed")
+parser.add_argument("--save_rate", type=int, default=20,
+                    help="save model once every time this many episodes are completed")
 parser.add_argument('--save_dir', type=str, default="model/dqn_4x4", help='directory in which model should be saved')
 parser.add_argument('--log_dir', type=str, default="log/dqn_4x4", help='directory in which logs should be saved')
 args = parser.parse_args()
@@ -44,7 +45,7 @@ logger.addHandler(fh)
 logger.addHandler(sh)
 
 # TODO: Don't hardcode this
-model_file = "models/model_manhattan_categorical_good.pt"
+model_file = "models/model_manhattan_categorical.pt"
 
 # create world
 world = World(args.config_file, thread_num=args.thread, gnn_vae=GNNVAEModel.from_model_state(torch.load(model_file)))
@@ -55,7 +56,8 @@ for i in world.intersections:
     action_space = gym.spaces.Discrete(len(i.phases))
     agents.append(DQNAgent(
         action_space,
-        LaneVehicleGenerator(world, i, ["lane_count"], in_only=True, average=None),
+        # LaneVehicleGenerator(world, i, ["lane_count"], in_only=True, average=None), # Original data.
+        LaneVehicleGenerator(world, i, ["auto_encoder_output"], in_only=True, average=None),  # VAE output.
         LaneVehicleGenerator(world, i, ["lane_waiting_count"], in_only=True, average="all", negative=True),
         i.id
     ))
@@ -72,6 +74,7 @@ metric = TravelTimeMetric(world)
 
 # create env
 env = TSCEnv(world, agents, metric)
+
 
 # train dqn_agent
 def train(args, env):
@@ -91,7 +94,7 @@ def train(args, env):
                 actions = []
                 for agent_id, agent in enumerate(agents):
                     if total_decision_num > agent.learning_start:
-                    #if True:
+                        # if True:
                         actions.append(agent.get_action(last_obs[agent_id]))
                     else:
                         actions.append(agent.sample())
@@ -108,7 +111,7 @@ def train(args, env):
                     episodes_rewards[agent_id] += rewards[agent_id]
                     episodes_decision_num += 1
                 total_decision_num += 1
-                
+
                 last_obs = obs
 
             for agent_id, agent in enumerate(agents):
@@ -125,7 +128,9 @@ def train(args, env):
                 agent.save_model(args.save_dir)
         logger.info("episode:{}/{}, average travel time:{}".format(e, args.episodes, env.eng.get_average_travel_time()))
         for agent_id, agent in enumerate(agents):
-            logger.info("agent:{}, mean_episode_reward:{}".format(agent_id, episodes_rewards[agent_id] / episodes_decision_num))
+            logger.info(
+                "agent:{}, mean_episode_reward:{}".format(agent_id, episodes_rewards[agent_id] / episodes_decision_num))
+
 
 def test():
     obs = env.reset()
@@ -137,7 +142,7 @@ def test():
             for agent_id, agent in enumerate(agents):
                 actions.append(agent.get_action(obs[agent_id]))
         obs, rewards, dones, info = env.step(actions)
-        #print(rewards)
+        # print(rewards)
 
         if all(dones):
             break
