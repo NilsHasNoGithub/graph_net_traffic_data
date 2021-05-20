@@ -190,7 +190,7 @@ dic_graph_setting = {
 model_file = "models/model_manhattan_categorical_good.pt"
 
 def build(path):
-    world = World(path, args.thread, GNNVAEModel.from_model_state(torch.load(model_file)))
+    world = World(path, args.thread, GNNVAEModel.from_model_state(torch.load(model_file)), vae_data_dir="generated_data/colight_data")
     # create observation generator, which is used to construct sample
     observation_generators = []
     for node_dict in world.intersections:

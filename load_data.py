@@ -263,7 +263,7 @@ class LaneVehicleCountDatasetMissing(LaneVehicleCountDataset):
             counts = [intersection_data.data[lane_id] for lane_id in
                       intersection.incoming_lanes + intersection.outgoing_lanes]
 
-            phase_one_hot = [0.0] * 5
+            phase_one_hot = [0.0] * self._graph.n_intersection_phases()
 
             phase_one_hot[int(intersection_data.phase)] = 1.0
 

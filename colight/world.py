@@ -1,5 +1,7 @@
 import json
+import os
 import os.path as osp
+import random
 from typing import Optional
 
 import cityflow
@@ -8,10 +10,14 @@ import numpy as np
 from math import atan2, pi
 import sys
 
+import orjson
+from torch.nn.functional import mse_loss
+
 from full_model import GNNVAEModel
 from gen_data import gather_step_data
 from roadnet_graph import  RoadnetGraph
 import torch
+import sys
 
 def _get_direction(road, out=True):
     if out:
@@ -134,12 +140,14 @@ class Intersection(object):
         self.action_before_yellow = None
 
 
+DATA_CACHE_LEN = 500
+
 class World(object):
     """
     Create a CityFlow engine and maintain informations about CityFlow world
     """
 
-    def __init__(self, cityflow_config, thread_num, gnn_vae: Optional[GNNVAEModel]=None):
+    def __init__(self, cityflow_config, thread_num, gnn_vae: Optional[GNNVAEModel]=None, vae_data_dir:Optional[str]=None):
         print("building world...")
         self.eng = cityflow.Engine(cityflow_config, thread_num=thread_num)
         with open(cityflow_config) as f:
@@ -150,6 +158,9 @@ class World(object):
         self.interval = cityflow_config["interval"]
 
         self._gnn_vae = gnn_vae
+        self._vae_data_dir = vae_data_dir
+        self._vae_data_cache = []
+
 
         # get all non virtual intersections
         self.intersections = [i for i in self.roadnet["intersections"] if not i["virtual"]]
@@ -214,6 +225,22 @@ class World(object):
 
         print("world built.")
 
+    def _save_vae_data(self, step_data):
+        assert self._vae_data_dir is not None
+
+        self._vae_data_cache.append(step_data)
+
+        if len(self._vae_data_cache) > DATA_CACHE_LEN:
+            rand_id = random.randint(0, 1_000_000_000)
+            save_file = os.path.join(self._vae_data_dir, f"vae_data{rand_id}.json")
+
+            with open(save_file, "wb") as f:
+                f.write(orjson.dumps(self._vae_data_cache))
+
+            self._vae_data_cache = []
+
+
+
     def get_auto_encoder_output(self):
 
         if self._gnn_vae is None:
@@ -222,6 +249,7 @@ class World(object):
         intersection_phases = {i.id:i.current_phase for i in self.intersections}
 
         step_data = gather_step_data(self.eng, self.roadnet_graph, intersection_phases=intersection_phases)
+
         tnsr = self.roadnet_graph.tensor_data_from_time_step_data(step_data)
         output = self._gnn_vae(tnsr.view(-1, *tnsr.shape))
         modes = self.roadnet_graph.lane_feats_from_tensor(output.x.view(output.x.shape[1:]))
@@ -230,9 +258,12 @@ class World(object):
         entropies_tnsr = - 1.0 * (probs * torch.log2(probs+ 0.0000000001)).sum(-1)
         entropies = self.roadnet_graph.lane_feats_from_tensor(entropies_tnsr, agg=lambda a, b: (a+b)/2)
         #TODO concat mean and entropy
+        # print(torch.max(output.x))
+        # print(mse_loss(tnsr[:, 6:], output.x))
         result = {}
         for k in modes.keys():
             result[k] = [modes[k], entropies[k]]
+            # result[k] = modes[k]
 
         return result
 
@@ -363,6 +394,12 @@ class World(object):
                 self.intersections[i].step(action, self.interval)
         self.eng.next_step()
         self._update_infos()
+
+
+        if self._vae_data_dir is not None:
+            intersection_phases = {i.id: int(i.current_phase) for i in self.intersections}
+            step_data = gather_step_data(self.eng, self.roadnet_graph, intersection_phases=intersection_phases)
+            self._save_vae_data(step_data)
 
     def reset(self):
         self.eng.reset()

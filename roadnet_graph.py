@@ -249,6 +249,9 @@ class RoadnetGraph:
 
         return result
 
+    def n_intersection_phases(self) -> int:
+        return 9
+
     def tensor_data_from_time_step_data(self, data_t: dict,
                                         hidden_intersections: Optional[Set[str]]=None) -> torch.Tensor:
         """
@@ -279,9 +282,9 @@ class RoadnetGraph:
 
             hidden_feat = 0.0 if is_observed else 1.0
 
-            phase_one_hot = [0.0] * 5
-            self._phases.add(int(intersection_phases[intersection.id]))
-            # phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
+            phase_one_hot = [0.0] * self.n_intersection_phases()
+            # self._phases.add(int(intersection_phases[intersection.id]))
+            phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
 
             result.append([hidden_feat] + phase_one_hot + lane_counts)
 
