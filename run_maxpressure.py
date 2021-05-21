@@ -14,7 +14,7 @@ from typing import List, AnyStr, Dict, Set, Optional
 import gen_data
 
 
-N_STEPS = 1000
+N_STEPS = 10_000
 
 @dataclass
 class Args:
@@ -141,11 +141,26 @@ def main(args: Args = None):
     hidden_observations = set()
     fta = 0
     mpa = 0
+    """
     if use_rl:
         for intersection in graph.intersection_list():
-            if random.random() < 0.3:
+            if random.random() < 0.1:
                 hidden_observations.add(intersection.id)
                 agents.append(FixedTimeAgent(intersection))
+                fta += 1
+            else:
+                agents.append(UncertainMaxPressureAgent(intersection))
+                mpa += 1
+
+    print(f"fta: {fta}")
+    print(f"mpa: {mpa}")
+    """
+
+    if use_rl:
+        for intersection in graph.intersection_list():
+            if random.random() < 0.0:
+                hidden_observations.add(intersection.id)
+                agents.append(UncertainMaxPressureAgent(intersection))
                 fta += 1
             else:
                 agents.append(UncertainMaxPressureAgent(intersection))

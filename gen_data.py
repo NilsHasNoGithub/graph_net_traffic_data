@@ -13,7 +13,7 @@ import random
 
 
 
-N_STEPS = 100_000
+N_STEPS = 10_000
 
 @dataclass
 class Args:
@@ -137,7 +137,7 @@ def main(args: Args = None):
     agents = [MaxPressureAgent(intersection) for intersection in graph.intersection_list()]
 
     data = collect_data(engine, graph, N_STEPS, agents=agents)
-
+    
     store_json(data, args.out_file)
     if args.shuffle_file is not None:
         random.shuffle(data)

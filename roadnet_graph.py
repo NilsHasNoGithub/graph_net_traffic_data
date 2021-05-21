@@ -280,7 +280,7 @@ class RoadnetGraph:
 
             hidden_feat = 0.0 if is_observed else 1.0
 
-            phase_one_hot = [0.0] * 5
+            phase_one_hot = [0.0] * 9
             phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
 
             result.append([hidden_feat] + phase_one_hot + lane_counts)

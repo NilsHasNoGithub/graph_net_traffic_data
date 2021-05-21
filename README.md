@@ -28,7 +28,7 @@ python training.py \
 python testing.py \
     -d generated_data/manhattan_16_3_data.json \
     -r sample-code/data/manhattan_16x3/roadnet_16_3.json \
-    -f models/model.pt \
+    -f models/model_manhattan_categorical.pt \
     -R results
 ```
 
@@ -36,5 +36,5 @@ python testing.py \
 python run_maxpressure.py \
     -c cityflow_configs/manhattan_16_3_cfg.json  \
     -o generated_data/manhattan_16_3_data.json   \
-    -f models/model.pt
+    -f models/model_manhattan_categorical.pt
 ```
