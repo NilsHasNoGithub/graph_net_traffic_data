@@ -2,6 +2,7 @@ from abc import abstractmethod, ABC
 
 from roadnet_graph import Intersection, RoadnetGraph
 import random
+from itertools import islice
 import numpy as np
 
 
@@ -151,9 +152,10 @@ class UncertainMaxPressureAgent(Agent):
         incoming_counts = []
         outgoing_counts = []
 
-        incoming = dict(step_data.items()[len(step_data)/2:])
-        outgoing = dict(step_data.items()[:len(step_data)/2])
-        
+        inc = iter(step_data.items())
+        incoming = dict(islice(inc, len(step_data) // 2))
+        outgoing = dict(inc)
+           
         # Get densities for MaxPressure calculations
         for incoming_road in self.intersection.incoming_roads:
             road_length = incoming_road.length()

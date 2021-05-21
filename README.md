@@ -32,3 +32,9 @@ python testing.py \
     -R results
 ```
 
+```
+python run_maxpressure.py \
+    -c cityflow_configs/manhattan_16_3_cfg.json  \
+    -o generated_data/manhattan_16_3_data.json   \
+    -f models/model.pt
+```

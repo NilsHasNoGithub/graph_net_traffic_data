@@ -4,6 +4,8 @@ import cityflow
 import torch
 from collections import defaultdict
 
+from torch._C import Size
+
 from utils import load_json, Point
 
 
@@ -287,7 +289,6 @@ class RoadnetGraph:
 
     def lane_feats_per_intersection_from_tensor(self, tensor: torch.Tensor) -> Dict[str, Dict[str, float]]:
         result = {}
-
         for i_intersection, intersection in enumerate(self.intersection_list()):
             intersection_data = {}
             for i_lane, lane in enumerate(intersection.incoming_lanes + intersection.outgoing_lanes):
