@@ -1,5 +1,8 @@
 from dataclasses import dataclass
+from typing import List, Tuple
+
 import matplotlib.pyplot as plt
+
 
 @dataclass
 class TrainResults:
@@ -43,7 +46,8 @@ def parse_results(file_path: str):
         if "q_loss" in row:
             # Handle first train case.
             colon_split = {x.split(':')[0]: x.split(':')[1].split(',')[0] for x in split_row}
-            training_results.append(TrainResults(None, float(colon_split["q_loss"]), float(colon_split["rewards"]), None))
+            training_results.append(
+                TrainResults(None, float(colon_split["q_loss"]), float(colon_split["rewards"]), None))
         if "average travel time" in row:
             # Handle second train case.
             split_row = row.split(", ")
@@ -60,9 +64,7 @@ def parse_results(file_path: str):
     return training_results, testing_results
 
 
-def plot_results(training_results: list, testing_results: list, model_name: str = ""):
-    # TODO: Also make plots comparing the two models.
-
+def plot_single_results(training_results: list, testing_results: list, model_name: str = ""):
     # Travel times plot
     training_travel_times = [x.travel_time for x in training_results]
     testing_travel_times = [x.travel_time for x in testing_results]
@@ -73,7 +75,7 @@ def plot_results(training_results: list, testing_results: list, model_name: str 
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Average travel time")
-    plt.savefig(fname=f"./colight_results/plots/{model_name}_travel_times.png")
+    plt.savefig(fname=f"./colight_results/plots/single/{model_name}_travel_times.png")
     plt.show()
 
     # Rewards plot
@@ -86,7 +88,7 @@ def plot_results(training_results: list, testing_results: list, model_name: str 
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Rewards")
-    plt.savefig(fname=f"./colight_results/plots/{model_name}_rewards.png")
+    plt.savefig(fname=f"./colight_results/plots/single/{model_name}_rewards.png")
     plt.show()
 
     # Q_loss plot
@@ -97,16 +99,55 @@ def plot_results(training_results: list, testing_results: list, model_name: str 
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Q loss")
-    plt.savefig(fname=f"./colight_results/plots/{model_name}_q_loss.png")
+    plt.savefig(fname=f"./colight_results/plots/single/{model_name}_q_loss.png")
+    plt.show()
+
+
+def plot_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], List[TestResults]],
+                            with_autoencoder_results: Tuple[List[TrainResults], List[TestResults]], model_names):
+    # Travel times plot
+    plt.title(f"Travel times of test data during training")
+    plt.plot([x.travel_time for x in no_autoencoder_results[1]], label="No autoencoder")
+    plt.plot([x.travel_time for x in with_autoencoder_results[1]], label="With autoencoder")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Average travel time")
+    plt.savefig(fname=f"./colight_results/plots/comparison/{model_names}_travel_times.png")
+    plt.show()
+
+    # Rewards plot
+    plt.title(f"Rewards of testing data during training")
+    plt.plot([x.rewards for x in no_autoencoder_results[1]], label="No autoencoder")
+    plt.plot([x.rewards for x in with_autoencoder_results[1]], label="With autoencoder")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Rewards")
+    plt.savefig(fname=f"./colight_results/plots/comparison/{model_names}_rewards.png")
+    plt.show()
+
+    # TODO: Potentially include broken-axes here (there's a lib).
+    # Q_loss plot
+    plt.title(f"Q loss during training")
+    plt.plot([x.q_loss for x in no_autoencoder_results[0]], label="No autoencoder")
+    plt.plot([x.q_loss for x in with_autoencoder_results[0]], label="With autoencoder")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Q loss")
+    plt.savefig(fname=f"./colight_results/plots/comparison/{model_names}_q_loss.png")
     plt.show()
 
 
 if __name__ == "__main__":
     # Enter txt file.
-    results_txt = "colight_results/hidden_no_autoencoder1.txt"
+    results_txt = "colight_results/hidden_w_autoencoder1.txt"
 
     # Parse the input
     training_results_list, testing_results_list = parse_results(results_txt)
 
     # Plot results
-    plot_results(training_results_list, testing_results_list, results_txt.split("/")[-1].split(".txt")[0])
+    plot_single_results(training_results_list, testing_results_list, results_txt.split("/")[-1].split(".txt")[0])
+
+    # Plot comparison
+    plot_comparison_results(parse_results("colight_results/hidden_no_autoencoder1.txt"),
+                            parse_results("colight_results/hidden_w_autoencoder1.txt"),
+                            "hidden_no_and_with_autoencoder1")
