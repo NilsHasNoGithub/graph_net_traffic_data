@@ -72,7 +72,8 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optio
         lane_vh_infos[lane_id] = [{"id": ci.id, "closestIntersection": ci.closest_intersection_id} for ci in car_infos]
 
 
-    if agents is not None and intersection_phases is not None:
+    if agents is not None and intersection_phases is None:
+        intersection_phases = {}
         for agent in agents:
             intersection_phases[agent.get_intersection().id] = agent.get_prev_phase()
 

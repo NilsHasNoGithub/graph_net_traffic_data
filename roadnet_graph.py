@@ -266,6 +266,8 @@ class RoadnetGraph:
 
         result = []
 
+        debug_counts = defaultdict(int)
+
         for intersection in self.intersection_list():
             is_observed = hidden_intersections is None or (intersection.id not in hidden_intersections)
             lane_counts = []
@@ -277,6 +279,7 @@ class RoadnetGraph:
                     for car_info in lane_vh_infos[lane]:
                         if car_info["closestIntersection"] == intersection.id:
                             count += 1.0
+                            debug_counts[lane] += 1.0
 
                 lane_counts.append(count)
 

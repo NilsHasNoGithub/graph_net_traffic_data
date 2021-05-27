@@ -43,12 +43,17 @@ parser.add_argument('--save_model', action="store_false", default=True)
 parser.add_argument('--load_model', action="store_true", default=False)
 parser.add_argument("--save_rate",type=int,default=10,help="save model once every time this many episodes are completed")
 parser.add_argument('--save_dir',type=str,default="model/colight_debug_1x5",help='directory in which model should be saved')
-#parser.add_argument('--load_dir',type=str,default="model/colight",help='directory in which model should be loaded')
+parser.add_argument('--load_dir',type=str,default="model/colight",help='directory in which model should be loaded')
 parser.add_argument('--log_dir',type=str,default="log/colight_debug_1x5",help='directory in which logs should be saved')
 parser.add_argument('--vehicle_max',type=int,default=1,help='used to normalize node observayion')
 parser.add_argument('--mask_type',type=int,default=0,help='used to specify the type of softmax')
 parser.add_argument('--get_attention', action="store_true", default=False)
 parser.add_argument('--test_when_train', action="store_false", default=True)
+
+parser.add_argument("--test-to-run", type=str, default="hidden-no-autoencoder", help="[hidden-no-autoencoder, hidden_w_autoencoder]")
+parser.add_argument("--vae-data-path", type=str, default=None)
+parser.add_argument("--p-intersection-missing", type=float, default=0.0)
+
 args = parser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.ngpu
@@ -68,6 +73,7 @@ logger.addHandler(fh)
 logger.addHandler(sh)
 
 # create world
+
 world0 = World(args.config_file, thread_num=args.thread)
 graph_info_file_dir = args.graph_info_dir + ".pkl"
 graph_info_file = open(graph_info_file_dir, "rb")
@@ -187,20 +193,43 @@ dic_graph_setting = {
     "NODE_DEGREE_NODE": node_degree_node,  # number of adjacent nodes of node
 }
 
-model_file = "models/model_manhattan_categorical_good.pt"
+model_file = "models/model_manhattan_categorical.pt"
+
 
 def build(path):
-    world = World(path, args.thread, GNNVAEModel.from_model_state(torch.load(model_file)), vae_data_dir="generated_data/colight_data")
+    # TODO: If you need unobserved intersections, please specify here:
+    unobserved_intersections = {'intersection_1_2', 'intersection_2_1', 'intersection_2_8', 'intersection_1_4', 'intersection_2_4', 'intersection_1_6', 'intersection_1_14', 'intersection_3_11', 'intersection_2_12', 'intersection_3_16', 'intersection_3_3', 'intersection_3_14', 'intersection_1_13', 'intersection_3_9', 'intersection_3_12', 'intersection_3_4'}
+
+
+    world = World(
+        path,
+        args.thread,
+        GNNVAEModel.from_model_state(torch.load(model_file)),
+        vae_data_dir=args.vae_data_path,
+        # p_hidden_intersections=args.p_intersection_missing
+        hidden_intersections=unobserved_intersections
+    )
+
     # create observation generator, which is used to construct sample
     observation_generators = []
     for node_dict in world.intersections:
         node_id = node_dict.id
         node_id_int = net_node_dict_inter2id[node_id]
-        tmp_generator = LaneVehicleGenerator(world,
-                                             # node_dict, ["lane_count"],
-                                             node_dict, ["auto_encoder_output"],
-                                             in_only=True,
-                                             average=None)
+        if args.test_to_run == "hidden_no_autoencoder":
+            tmp_generator = LaneVehicleGenerator(world,
+                                                 node_dict, ["lane_count_with_hidden"],
+                                                 in_only=True,
+                                                 average=None)
+        elif args.test_to_run == "hidden_w_autoencoder":
+            tmp_generator = LaneVehicleGenerator(world,
+                                                 node_dict, ["lane_count_with_hidden_autoencoder"],
+                                                 in_only=True,
+                                                 average=None)
+        else:
+            tmp_generator = LaneVehicleGenerator(world,
+                                                 node_dict, ["lane_count"],
+                                                 in_only=True,
+                                                 average=None)
         observation_generators.append((node_id_int, tmp_generator))
         # if len(observation_generators) == 5:
         #     break

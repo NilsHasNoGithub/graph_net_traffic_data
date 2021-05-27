@@ -64,6 +64,11 @@ def main():
 
     loss_fn = nn.MSELoss()
 
+    roadnet_graph = dataset.graph()
+    intersections = roadnet_graph.intersection_list()
+
+    print({i.id for i in random.sample(intersections, len(intersections) // 3)})
+
     sample, target, hidden_intersections = dataset.get_item(t, return_hidden_intersections=True)
     input_shape = dataset.input_shape()
     output_shape = dataset.output_shape()

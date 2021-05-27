@@ -24,8 +24,6 @@ class IntersectionVehicleGenerator():
         self.world = world
         self.I = I
 
-
-
         # get lanes of intersections
         self.lanes = []
         self.in_lanes = []

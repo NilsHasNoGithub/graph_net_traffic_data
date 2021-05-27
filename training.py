@@ -1,4 +1,6 @@
 import multiprocessing
+
+import numpy as np
 from dataclasses import dataclass
 from typing import AnyStr, Optional, List, Callable
 import argparse
@@ -91,10 +93,108 @@ def parse_args():
         SupportedVaeDistr.from_str(parsed.vae_distr) if parsed.vae_distr else None
     )
 
+def _averaged(items: List[List[float]]) -> List[float]:
+    return [float(np.mean(l)) for l in items]
+
+@dataclass
+class Losses:
+    losses: List[List[float]]
+    mse_losses: List[List[float]]
+    mse_losses_observed: List[List[float]]
+    mse_losses_unobserved: List[List[float]]
+
+    @staticmethod
+    def empty():
+        return Losses(
+            *[[] for _ in range(4)]
+        )
+
+    def losses_avgd(self):
+        return _averaged(self.losses)
+
+    def mse_losses_avgd(self):
+        return _averaged(self.mse_losses)
+
+    def mse_losses_observed_avgd(self):
+        return _averaged(self.mse_losses_observed)
+
+    def mse_losses_unobserved_avgd(self):
+        return _averaged(self.mse_losses_unobserved)
+
+
 @dataclass
 class TrainResults:
-    train_losses: List[float]
-    val_losses: List[float]
+    train_losses: Losses
+    val_losses: Losses
+
+    @staticmethod
+    def empty():
+        return TrainResults(
+            Losses.empty(),
+            Losses.empty(),
+        )
+
+
+    def new_epoch(self):
+        for losses in (self.train_losses, self.val_losses):
+            for l in (
+                losses.losses,
+                losses.mse_losses,
+                losses.mse_losses_observed,
+                losses.mse_losses_unobserved
+            ):
+                l.append([])
+
+    def _update(self, train: bool, inputs: Tensor, output: GNNVAEForwardResult, targets: Tensor, loss_fn: Callable[[GNNVAEForwardResult, Tensor], Tensor]) -> Tensor:
+        losses = self.train_losses if train else self.val_losses
+
+        modes = output.x
+
+        loss_tnsr = loss_fn(output, targets)
+        loss = loss_tnsr.item()
+        mse_loss = functional.mse_loss(modes, targets).item()
+
+        hidden_intersections_idxs = inputs[..., 0].long() == 1 # first feature encodes whether an intersecition is hidden
+
+        modes_unobserved = modes[hidden_intersections_idxs]
+        targets_unobserved = targets[hidden_intersections_idxs]
+
+        modes_observed = modes[~hidden_intersections_idxs]
+        targets_observed = targets[~hidden_intersections_idxs]
+
+        mse_loss_observed = functional.mse_loss(modes_observed, targets_observed).item()
+        mse_loss_unobserved = functional.mse_loss(modes_unobserved, targets_unobserved).item()
+
+        losses.losses[-1].append(loss)
+        losses.mse_losses[-1].append(mse_loss)
+        losses.mse_losses_observed[-1].append(mse_loss_observed)
+        losses.mse_losses_unobserved[-1].append(mse_loss_unobserved)
+
+        return loss_tnsr
+
+
+    def update_train(self, inputs: Tensor, output: GNNVAEForwardResult, targets: Tensor, loss_fn: Callable[[GNNVAEForwardResult, Tensor], Tensor]) -> Tensor:
+        """
+                Update all train losses
+                :param inputs:
+                :param output:
+                :param targets:
+                :param loss_fn:
+                :return: returns the loss computed by `loss_fn`
+                """
+        return self._update(True, inputs, output, targets, loss_fn)
+
+    def update_val(self, inputs: Tensor, output: GNNVAEForwardResult, targets: Tensor, loss_fn: Callable[[GNNVAEForwardResult, Tensor], Tensor]) -> Tensor:
+        """
+        Update all validation losses
+        :param inputs:
+        :param output:
+        :param targets:
+        :param loss_fn:
+        :return: the loss computed by `loss_fn`
+        """
+        return self._update(False, inputs, output, targets, loss_fn)
+
 
 def train(
         model: GNNVAEModel,
@@ -118,12 +218,7 @@ def train(
     :return:
     """
 
-    mse_loss_fn = nn.MSELoss()
-
-    train_losses = []
-    mse_train_losses = []
-    mse_val_losses = []
-    val_losses = []
+    results = TrainResults.empty()
 
     if device is None:
         device = DEVICE
@@ -131,10 +226,7 @@ def train(
 
     for i_epoch in range(n_epochs):
 
-        cur_train_loss = 0.0
-        cur_mse_loss = 0.0
-        cur_val_mse_loss = 0.0
-        cur_val_loss = 0.0
+        results.new_epoch()
 
         t = time.time()
 
@@ -146,15 +238,11 @@ def train(
             optimizer.zero_grad()
 
             output: GNNVAEForwardResult= model(inputs)
-            mse_loss = mse_loss_fn(output.x, targets)
-            loss = loss_fn(output, targets)
+            loss = results.update_train(inputs, output, targets, loss_fn)
 
             loss.backward()
 
             optimizer.step()
-
-            cur_train_loss += loss.item()
-            cur_mse_loss += mse_loss.item()
 
             t1 = time.time()
             print(
@@ -168,11 +256,7 @@ def train(
                 targets = targets.to(device)
 
                 output: GNNVAEForwardResult = model(inputs)
-                mse_loss = mse_loss_fn(output.x, targets)
-                loss = loss_fn(output, targets)
-
-                cur_val_loss += loss.item()
-                cur_val_mse_loss += mse_loss.item()
+                loss = results.update_val(inputs, output, targets, loss_fn)
 
                 t1 = time.time()
                 print(
@@ -181,22 +265,19 @@ def train(
                 )
                 t = t1
 
-        train_losses.append(cur_train_loss / len(train_dl))
-        mse_train_losses.append(cur_mse_loss / len(train_dl))
-        val_losses.append(cur_val_loss / len(val_dl))
-        mse_val_losses.append(cur_val_mse_loss / len(val_dl))
+        train_loss = np.mean(results.train_losses.losses[-1])
+        val_loss = np.mean(results.val_losses.losses[-1])
+        mse_train_loss = np.mean(results.train_losses.mse_losses[-1])
+        mse_val_loss = np.mean(results.val_losses.mse_losses[-1])
 
-        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_losses[-1]}, val_loss: {val_losses[-1]}, mse_train_loss: {mse_train_losses[-1]}, mse_val_loss: {mse_val_losses[-1]}")
+        print(f"\repoch {i_epoch + 1}/{n_epochs}: train_loss: {train_loss}, val_loss: {val_loss}, mse_train_loss: {mse_train_loss}, mse_val_loss: {mse_val_loss}")
 
         if model_file is not None:
             model.cpu()
             torch.save(model.get_model_state(), model_file)
             model.to(device)
 
-    return TrainResults(
-        train_losses,
-        val_losses
-    )
+    return results
 
 
 def mk_loss_fn(model: GNNVAEModel, log_prob_weight=10.0) -> Callable[[GNNVAEForwardResult, Tensor], Tensor]:
@@ -214,8 +295,8 @@ def main():
 
     # torch.set_num_threads(multiprocessing.cpu_count())
 
-    # p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
-    p_intersection_hidden_distr = 0.0
+    p_intersection_hidden_distr = torch.distributions.Beta(1.575, 3.675)
+    # p_intersection_hidden_distr = 0.0
 
     data_train, data_test = LaneVehicleCountDatasetMissing.train_test_from_files(args.roadnet_file, args.data_file, p_missing=p_intersection_hidden_distr, scale_by_road_len=False)
     # data_train, data_test = RandData(args.roadnet_file, p_missing=p_intersection_hidden_distr), RandData(args.roadnet_file, size=500, p_missing=p_intersection_hidden_distr)
@@ -263,19 +344,75 @@ def main():
     if args.result_dir is not None:
         os.makedirs(args.result_dir, exist_ok=True)
 
+        ### losses for which network optimizes
+
         fig = plt.figure(figsize=(10,5))
 
         p = fig.gca()
 
-        p.set_title("Losses: combination of MSE loss and Kullback Leibler divergence")
-        p.plot(results.train_losses, label="train loss")
-        p.plot(results.val_losses, label="validation loss")
+        p.set_title("Losses: combination of Kullback Leibler divergence and log probabilities")
+        p.plot(results.train_losses.losses_avgd(), label="train loss")
+        p.plot(results.val_losses.losses_avgd(), label="validation loss")
         p.set_xlabel("$i$th epoch")
         p.set_ylabel("Loss")
         p.legend()
 
         fig.tight_layout()
         fig.savefig(os.path.join(args.result_dir, "losses.png"))
+
+        plt.close(fig)
+
+        ### all mse losses
+
+        fig = plt.figure(figsize=(10, 5))
+
+        p = fig.gca()
+
+        p.set_title("Losses: Mean squared error")
+        p.plot(results.train_losses.mse_losses_avgd(), label="train loss")
+        p.plot(results.val_losses.mse_losses_avgd(), label="validation loss")
+        p.set_xlabel("$i$th epoch")
+        p.set_ylabel("Loss")
+        p.legend()
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(args.result_dir, "mse_losses.png"))
+
+        plt.close(fig)
+
+        ### observed only
+
+        fig = plt.figure(figsize=(10, 5))
+
+        p = fig.gca()
+
+        p.set_title("Losses: Mean squared error at observed intersections")
+        p.plot(results.train_losses.mse_losses_observed_avgd(), label="train loss")
+        p.plot(results.val_losses.mse_losses_observed_avgd(), label="validation loss")
+        p.set_xlabel("$i$th epoch")
+        p.set_ylabel("Loss")
+        p.legend()
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(args.result_dir, "mse_losses_observed.png"))
+
+        plt.close(fig)
+
+        ### Unobserved only
+
+        fig = plt.figure(figsize=(10, 5))
+
+        p = fig.gca()
+
+        p.set_title("Losses: Mean squared error at unobserved intersections")
+        p.plot(results.train_losses.mse_losses_unobserved_avgd(), label="train loss")
+        p.plot(results.val_losses.mse_losses_unobserved_avgd(), label="validation loss")
+        p.set_xlabel("$i$th epoch")
+        p.set_ylabel("Loss")
+        p.legend()
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(args.result_dir, "mse_losses_unobserved.png"))
 
         plt.close(fig)
 

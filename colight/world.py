@@ -2,7 +2,7 @@ import json
 import os
 import os.path as osp
 import random
-from typing import Optional
+from typing import Optional, Set, Dict
 
 import cityflow
 
@@ -147,7 +147,7 @@ class World(object):
     Create a CityFlow engine and maintain informations about CityFlow world
     """
 
-    def __init__(self, cityflow_config, thread_num, gnn_vae: Optional[GNNVAEModel]=None, vae_data_dir:Optional[str]=None):
+    def __init__(self, cityflow_config, thread_num, gnn_vae: Optional[GNNVAEModel]=None, vae_data_dir:Optional[str]=None, p_hidden_intersections=0.0, hidden_intersections:Optional[Set[str]]=None):
         print("building world...")
         self.eng = cityflow.Engine(cityflow_config, thread_num=thread_num)
         with open(cityflow_config) as f:
@@ -161,6 +161,23 @@ class World(object):
         self._vae_data_dir = vae_data_dir
         self._vae_data_cache = []
 
+        # set the hidden intersections
+        self._hidden_intersections = hidden_intersections
+
+        if p_hidden_intersections > 0.0 and hidden_intersections is None:
+            self._hidden_intersections = set()
+
+            for intersection in self.roadnet_graph.intersection_list():
+                if random.random() < p_hidden_intersections:
+                    self._hidden_intersections.add(intersection.id)
+
+        self.hidden_lanes = set()
+
+        if hidden_intersections is not None:
+            for intersection in self.roadnet_graph.intersection_list():
+                if intersection.id in self._hidden_intersections:
+                    for lane in intersection.incoming_lanes:
+                        self.hidden_lanes.add(lane)
 
         # get all non virtual intersections
         self.intersections = [i for i in self.roadnet["intersections"] if not i["virtual"]]
@@ -213,6 +230,8 @@ class World(object):
             "lane_waiting_time_count": self.get_lane_waiting_time_count,
             "lane_delay": self.get_lane_delay,
             "vehicle_trajectory": self.get_vehicle_trajectory,
+            "lane_count_with_hidden": self.get_lane_count_with_hidden,
+            "lane_count_with_hidden_autoencoder": self.get_lane_count_with_hidden_autoencoder,
             "history_vehicles": self.get_history_vehicles,
             "auto_encoder_output": self.get_auto_encoder_output
         }
@@ -224,6 +243,7 @@ class World(object):
         self.history_vehicles = set()
 
         print("world built.")
+
 
     def _save_vae_data(self, step_data):
         assert self._vae_data_dir is not None
@@ -241,29 +261,71 @@ class World(object):
 
 
 
-    def get_auto_encoder_output(self):
+    def get_lane_count_with_hidden(self) -> Dict:
+
+        lane_counts = self.eng.get_lane_vehicle_count()
+
+
+        result = {}
+        for lane, count in lane_counts.items():
+            if lane in self.hidden_lanes:
+                result[lane] = [1, 0]
+            else:
+                result[lane] = [0, count]
+
+        return result
+
+    def get_lane_count_with_hidden_autoencoder(self):
+
+        lane_counts = self.get_lane_count_with_hidden()
+        autoencoder_lane_counts = self.get_auto_encoder_output()
+
+        result = {}
+
+        for k in lane_counts.keys():
+            is_hidden, count = lane_counts[k]
+            mode, entropy = autoencoder_lane_counts[k]
+
+            if is_hidden == 1:
+                result[k] = [1, mode, entropy]
+            else:
+                result[k] = [0, count, 0]
+
+        return result
+
+
+
+    def cur_intersection_phases(self):
+        return {i.id:i.current_phase for i in self.intersections}
+
+    def get_auto_encoder_output(self) -> Dict:
 
         if self._gnn_vae is None:
             raise Exception("no gnnvae supplied")
 
-        intersection_phases = {i.id:i.current_phase for i in self.intersections}
+        intersection_phases = self.cur_intersection_phases()
 
         step_data = gather_step_data(self.eng, self.roadnet_graph, intersection_phases=intersection_phases)
 
-        tnsr = self.roadnet_graph.tensor_data_from_time_step_data(step_data)
-        output = self._gnn_vae(tnsr.view(-1, *tnsr.shape))
+        tnsr = self.roadnet_graph.tensor_data_from_time_step_data(step_data,
+                                                                  hidden_intersections=self._hidden_intersections)
+        # tnsr = self.roadnet_graph.tensor_data_from_time_step_data(step_data)
+
+        output = self._gnn_vae(tnsr.view(1, *tnsr.shape))
+
         modes = self.roadnet_graph.lane_feats_from_tensor(output.x.view(output.x.shape[1:]))
+        # modes = self.roadnet_graph.lane_feats_from_tensor(tnsr[:, 10:])
         probs = output.params_decoder[0]
         probs = probs.view(probs.shape[1:])
         entropies_tnsr = - 1.0 * (probs * torch.log2(probs+ 0.0000000001)).sum(-1)
         entropies = self.roadnet_graph.lane_feats_from_tensor(entropies_tnsr, agg=lambda a, b: (a+b)/2)
-        #TODO concat mean and entropy
-        # print(torch.max(output.x))
-        # print(mse_loss(tnsr[:, 6:], output.x))
+
+        # print(torch.nn.functional.mse_loss(tnsr[:, 10:], output.x.view(output.x.shape[1:]).float()))
+
         result = {}
         for k in modes.keys():
             result[k] = [modes[k], entropies[k]]
-            # result[k] = modes[k]
+            # result[k] = [modes[k]]
 
         return result
 

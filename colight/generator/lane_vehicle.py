@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 from . import BaseGenerator
 
@@ -43,9 +45,14 @@ class LaneVehicleGenerator(BaseGenerator):
             size = 1
         self.ob_length = len(fns) * size
 
-        if "auto_encoder_output" in fns:
+        uses_autoencoder = "lane_count_with_hidden_autoencoder" in fns or "auto_encoder_output" in fns
+        uses_hidden = "lane_count_with_hidden" in fns or "lane_count_with_hidden_autoencoder" in fns
+
+        if uses_autoencoder:
             self.ob_length += size
 
+        if uses_hidden:
+            self.ob_length += 4
 
         if self.ob_length == 3:
             self.ob_length = 4
@@ -59,15 +66,30 @@ class LaneVehicleGenerator(BaseGenerator):
         ret = np.array([])
         for i in range(len(self.fns)):
             result = results[i]
+            hidden_infos = []
+            contains_hidden_label = self.fns[i] in {"lane_count_with_hidden", "lane_count_with_hidden_autoencoder"}
             fn_result = np.array([])
 
             for road_lanes in self.lanes:
                 road_result = []
+
                 for lane_id in road_lanes:
-                    road_result.append(result[lane_id])
+                    if contains_hidden_label:
+                        is_hidden, *feats = result[lane_id]
+                        hidden_infos.append(is_hidden)
+                        road_result.append(feats)
+                    else:
+                        road_result.append(result[lane_id])
+
+                if len(road_result) >= 1 and isinstance(road_result[0], List):
+                    road_result = [r for rs in road_result for r in rs]
+
                 if self.average == "road" or self.average == "all":
                     road_result = np.mean(road_result)
                 else:
+                    if contains_hidden_label:
+                        assert all(hidden_infos[i] == hidden_infos[0] for i in range(len(hidden_infos)))
+                        road_result.append(hidden_infos[0])
                     road_result = np.array(road_result)
                 fn_result = np.append(fn_result, road_result)
             
