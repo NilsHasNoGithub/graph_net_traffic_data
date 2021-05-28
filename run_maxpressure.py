@@ -14,7 +14,7 @@ from typing import List, AnyStr, Dict, Set, Optional
 import gen_data
 
 
-N_STEPS = 10_000
+N_STEPS = 3_600
 
 @dataclass
 class Args:
@@ -90,6 +90,7 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, mod
         engine.reset()
 
     data = []
+    avg =[]
     try:
         for i_step in range(n_steps):
             step_data = gather_step_data(engine, graph, agents=agents)
@@ -101,7 +102,7 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, mod
                 agent.act(engine, mle[agent.get_intersection().id])
 
             engine.next_step()
-
+            avg.append(engine.get_average_travel_time())
             if print_info:
                 print(f"\r i: {i_step}, avg travel time: " + str(engine.get_average_travel_time()), end="")
 
@@ -116,7 +117,7 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, mod
     except KeyboardInterrupt:
         pass
 
-    return data
+    return data, avg
 
 def main(args: Args = None):
 
@@ -127,11 +128,11 @@ def main(args: Args = None):
     cityflow_cfg = load_json(args.cfg_file)
 
     graph = RoadnetGraph(cityflow_cfg["roadnetFile"])
-
+    
     use_rl = cityflow_cfg["rlTrafficLight"]
-
+    
     engine = cityflow.Engine(config_file=args.cfg_file, thread_num=multiprocessing.cpu_count())
-
+    
     ##VAE init
     state = torch.load(args.model_file)
     model = GNNVAEModel.from_model_state(state)
@@ -139,23 +140,23 @@ def main(args: Args = None):
     agents = []
     hidden_observations = {}
     hidden_observations = set()
+    hidden_observations.update(['intersection_1_14', 'intersection_2_12', 'intersection_2_13', 'intersection_3_2', 'intersection_1_12'])
+
     fta = 0
     mpa = 0
-    """
     if use_rl:
         for intersection in graph.intersection_list():
-            if random.random() < 0.1:
-                hidden_observations.add(intersection.id)
+            if intersection.id in hidden_observations:
                 agents.append(FixedTimeAgent(intersection))
                 fta += 1
             else:
                 agents.append(UncertainMaxPressureAgent(intersection))
                 mpa += 1
-
+    
     print(f"fta: {fta}")
     print(f"mpa: {mpa}")
-    """
-
+    
+    '''
     if use_rl:
         for intersection in graph.intersection_list():
             if random.random() < 0.0:
@@ -168,8 +169,9 @@ def main(args: Args = None):
 
     print(f"fta: {fta}")
     print(f"mpa: {mpa}")
+    '''
 
-    data = collect_data(engine, graph, N_STEPS, model, hidden_observations, agents=agents)
+    data, _ = collect_data(engine, graph, N_STEPS, model, hidden_observations, agents=agents)
 
 if __name__ == '__main__':
     main()
