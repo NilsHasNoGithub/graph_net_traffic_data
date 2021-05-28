@@ -9,6 +9,7 @@
 /colight/log
 /data
 /model
+/colight_results
 __pycache__/**
 *.pyc
 *.venv

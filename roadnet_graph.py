@@ -4,6 +4,8 @@ import cityflow
 import torch
 from collections import defaultdict
 
+from torch._C import Size
+
 from utils import load_json, Point
 
 
@@ -285,8 +287,10 @@ class RoadnetGraph:
 
             hidden_feat = 0.0 if is_observed else 1.0
 
+
             phase_one_hot = [0.0] * self.n_intersection_phases()
             # self._phases.add(int(intersection_phases[intersection.id]))
+
             phase_one_hot[int(intersection_phases[intersection.id])] = 1.0
 
             result.append([hidden_feat] + phase_one_hot + lane_counts)
@@ -295,7 +299,6 @@ class RoadnetGraph:
 
     def lane_feats_per_intersection_from_tensor(self, tensor: torch.Tensor) -> Dict[str, Dict[str, float]]:
         result = {}
-
         for i_intersection, intersection in enumerate(self.intersection_list()):
             intersection_data = {}
             for i_lane, lane in enumerate(intersection.incoming_lanes + intersection.outgoing_lanes):

@@ -1,5 +1,6 @@
 import multiprocessing
 from dataclasses import dataclass
+from roadnet_graph import RoadnetGraph
 from typing import AnyStr, Optional, List, Callable
 import argparse
 import os
@@ -72,7 +73,6 @@ def main():
     sample, target, hidden_intersections = dataset.get_item(t, return_hidden_intersections=True)
     input_shape = dataset.input_shape()
     output_shape = dataset.output_shape()
-
     output: GNNVAEForwardResult = model(sample.view(1, *input_shape))
 
     params = output.params_decoder

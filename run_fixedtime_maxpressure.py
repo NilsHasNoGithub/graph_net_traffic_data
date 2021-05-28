@@ -1,38 +1,37 @@
 import multiprocessing
-import time
-
 import cityflow
 from dataclasses import dataclass
-from typing import AnyStr, Dict, List, Any, Optional, Tuple
+from typing import AnyStr, Dict, List, Any, Optional
 import argparse
-
-from agents import Agent, MaxPressureAgent, FixedTimeAgent
+import torch
+from full_model import GNNVAEModel
+from agents import Agent, MaxPressureAgent, FixedTimeAgent, UncertainMaxPressureAgent
 from roadnet_graph import RoadnetGraph
-from utils import store_json, load_json, Point, store_pkl
+from utils import store_json, load_json, store_pkl
 import random
+from full_model import GNNVAEModel
+from typing import List, AnyStr, Dict, Set, Optional
+import gen_data
 
 
-
-N_STEPS = 10_000
+N_STEPS = 3_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000
 
 @dataclass
 class Args:
     cfg_file: AnyStr
     out_file: AnyStr
-    shuffle_file: Optional[AnyStr]
+    model_file: AnyStr
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg-file", "-c", type=str, required=True)
-    parser.add_argument("--out-file", "-o", type=str, required=True)
-    parser.add_argument("--shuffled-out-file", "-s", type=str)
 
     parsed = parser.parse_args()
 
     return Args(
         parsed.cfg_file,
-        parsed.out_file,
-        parsed.shuffled_out_file
+        None,
+        None
     )
 
 @dataclass
@@ -60,8 +59,7 @@ class CarInfo:
         )
 
 
-
-def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optional[List[Agent]]=None, intersection_phases: Optional[Dict[str, int]]=None) -> dict:
+def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optional[List[Agent]]=None) -> dict:
     vh_counts = engine.get_lane_vehicle_count()
     lane_vhs = engine.get_lane_vehicles()
 
@@ -71,9 +69,9 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optio
         car_infos = (CarInfo.from_engine(engine, graph, vh_id) for vh_id in vhs)
         lane_vh_infos[lane_id] = [{"id": ci.id, "closestIntersection": ci.closest_intersection_id} for ci in car_infos]
 
+    intersection_phases = {}
 
-    if agents is not None and intersection_phases is None:
-        intersection_phases = {}
+    if agents is not None:
         for agent in agents:
             intersection_phases[agent.get_intersection().id] = agent.get_prev_phase()
 
@@ -85,19 +83,15 @@ def gather_step_data(engine: cityflow.Engine, graph: RoadnetGraph, agents: Optio
     }
 
 
-
-
-def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, agents: Optional[List[Agent]]=None, reset_pre=True, reset_post=True, print_info=True) -> List[Dict[str, Any]]:
+def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, hidden_intersections: Set[str]=None, agents: List[Agent]=None, reset_pre=True, reset_post=True, print_info=True) -> List[Dict[str, Any]]:
     if reset_pre:
         engine.reset()
 
     data = []
-
     try:
-
         for i_step in range(n_steps):
             step_data = gather_step_data(engine, graph, agents=agents)
-
+            
             for agent in agents:
                 agent.act(engine, step_data)
 
@@ -119,10 +113,9 @@ def collect_data(engine: cityflow.Engine, graph: RoadnetGraph, n_steps: int, age
 
     return data
 
-
-
 def main(args: Args = None):
 
+    ##Gendata init
     if args is None:
         args = parse_args()
 
@@ -134,15 +127,48 @@ def main(args: Args = None):
 
     engine = cityflow.Engine(config_file=args.cfg_file, thread_num=multiprocessing.cpu_count())
 
-    agents = [MaxPressureAgent(intersection) for intersection in graph.intersection_list()]
+    agents = []
+    agents = []
+    hidden_observations = set()
 
-    data = collect_data(engine, graph, N_STEPS, agents=agents)
-    
-    store_json(data, args.out_file)
-    if args.shuffle_file is not None:
-        random.shuffle(data)
-        store_json(data, args.shuffle_file)
+    non_observed_count = 0
+    fully_observed_count = 0
 
+    amount_unobserved = 5
+    rand_intersections = False
+
+    unobserved_intersections = set()
+
+    if use_rl:
+        if rand_intersections:
+            for intersection in graph.intersection_list():
+                if random.random() < 0.1:
+                    unobserved_intersections.add(intersection.id)
+                    agents.append(FixedTimeAgent(intersection))
+                    non_observed_count += 1
+                else:
+                    agents.append(MaxPressureAgent(intersection))
+                    fully_observed_count += 1
+        else:
+            intersections = set(graph.intersection_list())
+            unobserved_intersections = set(random.choices(graph.intersection_list(), k=amount_unobserved))
+
+            observed_intersections = intersections.difference(unobserved_intersections)
+
+            for intersection in unobserved_intersections:
+                hidden_observations.add(intersection.id)
+                agents.append(FixedTimeAgent(intersection))
+                non_observed_count += 1
+
+            for intersection in observed_intersections:
+                agents.append(MaxPressureAgent(intersection))
+                fully_observed_count += 1
+
+    print(f"non_observed_count: {non_observed_count}")
+    print("Unobserved intersections:", [x.id for x in unobserved_intersections])
+    print(f"fully_observed_count: {fully_observed_count}")
+
+    data = collect_data(engine, graph, N_STEPS, hidden_intersections=hidden_observations, agents=agents)
 
 if __name__ == '__main__':
     main()
