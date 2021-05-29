@@ -14,7 +14,7 @@ from typing import List, AnyStr, Dict, Set, Optional
 import gen_data
 
 
-N_STEPS = 3_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000
+N_STEPS =  3600
 
 @dataclass
 class Args:
@@ -151,21 +151,28 @@ def main(args: Args = None):
                     fully_observed_count += 1
         else:
             intersections = set(graph.intersection_list())
-            unobserved_intersections = set(random.choices(graph.intersection_list(), k=amount_unobserved))
+            #unobserved_intersections = set(random.choices(graph.intersection_list(), k=amount_unobserved))
+            #unobserved_intersections = {'intersection_1_14', 'intersection_2_12', 'intersection_2_13',
+            #                            'intersection_3_2',
+            #                            'intersection_1_12'}
+            unobserved_intersections = {'intersection_1_2', 'intersection_2_1', 'intersection_2_8', 'intersection_1_4',
+                                        'intersection_2_4', 'intersection_1_6', 'intersection_1_14', 'intersection_3_11',
+                                        'intersection_2_12', 'intersection_3_16', 'intersection_3_3', 'intersection_3_14',
+                                        'intersection_1_13', 'intersection_3_9', 'intersection_3_12', 'intersection_3_4'}
 
             observed_intersections = intersections.difference(unobserved_intersections)
 
-            for intersection in unobserved_intersections:
-                hidden_observations.add(intersection.id)
-                agents.append(FixedTimeAgent(intersection))
+            for intersection_id in unobserved_intersections:
+                hidden_observations.add(intersection_id)
+                agents.append(FixedTimeAgent(graph.intersection_dict()[intersection_id]))
                 non_observed_count += 1
 
-            for intersection in observed_intersections:
-                agents.append(MaxPressureAgent(intersection))
+            for intersection_id in observed_intersections:
+                agents.append(MaxPressureAgent(intersection_id))
                 fully_observed_count += 1
 
     print(f"non_observed_count: {non_observed_count}")
-    print("Unobserved intersections:", [x.id for x in unobserved_intersections])
+    print("Unobserved intersections:", [x for x in unobserved_intersections])
     print(f"fully_observed_count: {fully_observed_count}")
 
     data = collect_data(engine, graph, N_STEPS, hidden_intersections=hidden_observations, agents=agents)

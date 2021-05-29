@@ -193,7 +193,7 @@ dic_graph_setting = {
     "NODE_DEGREE_NODE": node_degree_node,  # number of adjacent nodes of node
 }
 
-model_file = "models/model_manhattan_categorical.pt"
+model_file = "models/model_manhattan_categorical_good.pt"
 
 
 def build(path):

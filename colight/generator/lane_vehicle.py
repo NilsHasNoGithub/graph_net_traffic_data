@@ -19,7 +19,7 @@ class LaneVehicleGenerator(BaseGenerator):
         "all" means take average of all lanes
     negative : boolean, whether return negative values (mostly for Reward)
     """
-    def __init__(self, world, I, fns, in_only=False, average=None, negative=False):
+    def __init__(self, world, I, fns, in_only=False, average=None, negative=False, include_phase=False):
         self.world = world
         self.I = I
 
@@ -57,8 +57,12 @@ class LaneVehicleGenerator(BaseGenerator):
         if self.ob_length == 3:
             self.ob_length = 4
 
+        if include_phase:
+            self.ob_length += 9
+
         self.average = average
         self.negative = negative
+        self.include_phase = include_phase
 
     def generate(self):
         results = [self.world.get_info(fn) for fn in self.fns]
@@ -108,7 +112,16 @@ class LaneVehicleGenerator(BaseGenerator):
             ret_list.append(0)
             ret_list.append(0)
             ret = np.array(ret_list)
+
+        if self.include_phase:
+            ret_list = list(ret)
+            phase_one_hot = [0.0] * 9
+            phase_one_hot[self.I.current_phase] = 1.0
+            ret = np.array(phase_one_hot + ret_list)
+
         return ret
+
+#TODO: Add self.I.current_phase
 
 if __name__ == "__main__":
     from world import World

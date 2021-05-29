@@ -177,7 +177,9 @@ def main(args: Args = None):
                         fully_observed_count += 1
             else:
                 intersections = set(graph.intersection_list())
-                unobserved_intersections = set(random.sample(graph.intersection_list(), k=amount_unobserved))
+                unobserved_intersections = {'intersection_1_14', 'intersection_2_12', 'intersection_2_13',
+                                            'intersection_3_2',
+                                            'intersection_1_12'}  #set(random.sample(graph.intersection_list(), k=amount_unobserved))
 
                 observed_intersections = intersections.difference(unobserved_intersections)
 

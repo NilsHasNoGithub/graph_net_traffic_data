@@ -10,7 +10,7 @@ from roadnet_graph import Intersection
 
 class FixedTimeAgent(Agent):
 
-    def __init__(self, intersection: Intersection, t_min: int = 3):
+    def __init__(self, intersection: Intersection, t_min: int = 10):
         self.intersection = intersection
         self.t_min = t_min
         self.t_since_last_change = random.randrange(0, t_min)
@@ -43,7 +43,7 @@ class FixedTimeAgent(Agent):
 
 class MaxPressureAgent(Agent):
 
-    def __init__(self, intersection: Intersection, t_min: int = 3, epsilon: float = 0.1):
+    def __init__(self, intersection: Intersection, t_min: int = 10, epsilon: float = 0.1):
         self.intersection = intersection
         self.t_min = t_min
         self.epsilon = epsilon
@@ -124,7 +124,7 @@ class MaxPressureAgent(Agent):
 
 class UncertainMaxPressureAgent(Agent):
 
-    def __init__(self, intersection: Intersection, t_min: int = 3, epsilon: float = 0.1):
+    def __init__(self, intersection: Intersection, t_min: int = 10, epsilon: float = 0.1):
         self.intersection = intersection
         self.t_min = t_min
         self.epsilon = epsilon
