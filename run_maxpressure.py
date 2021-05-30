@@ -180,6 +180,7 @@ def main(args: Args = None):
                 unobserved_intersections = {'intersection_1_14', 'intersection_2_12', 'intersection_2_13',
                                             'intersection_3_2',
                                             'intersection_1_12'}  #set(random.sample(graph.intersection_list(), k=amount_unobserved))
+                unobserved_intersections = {graph.intersection_dict()[x] for x in unobserved_intersections}
 
                 observed_intersections = intersections.difference(unobserved_intersections)
 

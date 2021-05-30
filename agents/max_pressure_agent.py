@@ -8,6 +8,7 @@ import numpy as np
 from agents.agent import Agent
 from roadnet_graph import Intersection
 
+
 class FixedTimeAgent(Agent):
 
     def __init__(self, intersection: Intersection, t_min: int = 10):
@@ -17,15 +18,15 @@ class FixedTimeAgent(Agent):
         self.prev_phase = random.randrange(1, 4)
 
     def get_intersection(self) -> Intersection:
-        return self.intersection  
+        return self.intersection
 
     def act(self, engine, step_data: dict):
-    # Get ordered counts of incoming and outgoing lanes.
+        # Get ordered counts of incoming and outgoing lanes.
         phase_id = self.prev_phase
 
         # If we have a new phase, reset the timer.
         self.t_since_last_change += 1
-        
+
         if self.t_since_last_change >= self.t_min:
             engine.set_tl_phase(self.intersection.id, phase_id)
             self.t_since_last_change = 0
@@ -34,20 +35,22 @@ class FixedTimeAgent(Agent):
                 phase_id = 1
 
         self.prev_phase = phase_id
-        
-        
+
     def get_prev_phase(self) -> int:
         return int(self.prev_phase)
-    
-            
+
 
 class MaxPressureAgent(Agent):
 
-    def __init__(self, intersection: Intersection, t_min: int = 10, epsilon: float = 0.1):
+    def __init__(self, intersection: Intersection, t_min: int = 10, epsilon: float = 0.0):
         self.intersection = intersection
         self.t_min = t_min
         self.epsilon = epsilon
         self.t_since_last_change = 0
+        self.yellow_time_counter = -1
+        self.max_yellow_time = 5
+
+        self.future_phase_id = 0
 
         self.prev_phase = 0
 
@@ -101,7 +104,29 @@ class MaxPressureAgent(Agent):
 
         phase_4 = north_east_count + south_west_count
 
-        all_phases = [phase_1, phase_2, phase_3, phase_4]
+        # Added (possibly redundant), phases
+
+        # Phase id 5: W-NE
+        west_northeast_count = sum(incoming_counts[0:2]) - (sum(outgoing_counts[6:9]) + sum(outgoing_counts[9:12]))
+
+        phase_5 = west_northeast_count
+
+        # Phase id 6: E-SW
+        east_southwest_count = sum(incoming_counts[9:11]) - (sum(outgoing_counts[3:6]) + sum(outgoing_counts[0:3]))
+
+        phase_6 = east_southwest_count
+
+        # Phase id 7: S-WN
+        south_westnorth_count = sum(incoming_counts[3:5]) - (sum(outgoing_counts[0:3]) + sum(outgoing_counts[6:9]))
+
+        phase_7 = south_westnorth_count
+
+        # Phase id 8: N-ES
+        north_eastsouth_count = sum(incoming_counts[6:8]) - (sum(outgoing_counts[9:12]) + sum(outgoing_counts[3:6]))
+
+        phase_8 = north_eastsouth_count
+
+        all_phases = [phase_1, phase_2, phase_3, phase_4]  # , phase_5, phase_6, phase_7, phase_8]
 
         if random.random() < self.epsilon:
             chosen_phase_id = random.randrange(0, len(all_phases))  # Choose random action
@@ -109,18 +134,24 @@ class MaxPressureAgent(Agent):
             chosen_phase_id = np.argmax(all_phases) + 1  # Choose "best" action
         self.t_since_last_change += 1
 
-        if self.t_since_last_change >= self.t_min:
-            # Change the phase only when T-minus has been surpassed
-            engine.set_tl_phase(self.intersection.id, chosen_phase_id)
+        if self.prev_phase != self.future_phase_id:  # Waiting
+            self.yellow_time_counter -= 1
+            engine.set_tl_phase(self.intersection.id, 0)
 
-            # If we have a new phase, reset the timer.
-            if chosen_phase_id != self.prev_phase:
-                self.t_since_last_change = 0
+        elif self.prev_phase != chosen_phase_id and self.t_since_last_change >= self.t_min:
+            self.future_phase_id = chosen_phase_id
 
-            self.prev_phase = chosen_phase_id
+        # Change the phase only when T-minus and yellow counter has been surpassed
+        if self.yellow_time_counter <= 0:
+            engine.set_tl_phase(self.intersection.id, self.future_phase_id)
+            self.t_since_last_change = 0
+
+            self.prev_phase = self.future_phase_id
+            self.yellow_time_counter = self.max_yellow_time
 
     def get_prev_phase(self) -> int:
         return int(self.prev_phase)
+
 
 class UncertainMaxPressureAgent(Agent):
 
@@ -143,7 +174,7 @@ class UncertainMaxPressureAgent(Agent):
         inc = iter(step_data.items())
         incoming = dict(islice(inc, len(step_data) // 2))
         outgoing = dict(inc)
-           
+
         # Get densities for MaxPressure calculations
         for incoming_road in self.intersection.incoming_roads:
             road_length = incoming_road.length()
@@ -205,4 +236,3 @@ class UncertainMaxPressureAgent(Agent):
 
     def get_prev_phase(self) -> int:
         return int(self.prev_phase)
-
