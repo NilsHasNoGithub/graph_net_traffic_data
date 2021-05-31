@@ -70,8 +70,8 @@ def plot_single_results(training_results: list, testing_results: list, model_nam
     testing_travel_times = [x.travel_time for x in testing_results]
 
     plt.title(f"Travel times during training, model={model_name}")
-    plt.plot(training_travel_times, label="Training data")
-    plt.plot(testing_travel_times, label="Testing data")
+    plt.plot(training_travel_times, label="Training phase")
+    plt.plot(testing_travel_times, label="Testing phase")
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Average travel time")
@@ -83,8 +83,8 @@ def plot_single_results(training_results: list, testing_results: list, model_nam
     test_rewards = [x.rewards for x in testing_results]
 
     plt.title(f"Rewards during training, model={model_name}")
-    plt.plot(train_rewards, label="Training data")
-    plt.plot(test_rewards, label="Testing data")
+    plt.plot(train_rewards, label="Training phase")
+    plt.plot(test_rewards, label="Testing phase")
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Rewards")
@@ -95,7 +95,7 @@ def plot_single_results(training_results: list, testing_results: list, model_nam
     train_q_loss = [x.q_loss for x in training_results]
 
     plt.title(f"Q loss during training, model={model_name}")
-    plt.plot(train_q_loss, label="Training data")
+    plt.plot(train_q_loss, label="Training phase")
     plt.legend()
     plt.xlabel("Episodes")
     plt.ylabel("Q loss")
