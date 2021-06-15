@@ -103,10 +103,14 @@ def plot_single_results(training_results: list, testing_results: list, model_nam
     plt.show()
 
 
-def plot_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], List[TestResults]],
-                            with_autoencoder_results: Tuple[List[TrainResults], List[TestResults]], model_names):
+def plot_two_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], List[TestResults]],
+                                with_autoencoder_results: Tuple[List[TrainResults], List[TestResults]], model_names):
+    """
+    Compares the no_autoencoder_results and the with_autoencoder results.
+    """
+
     # Travel times plot
-    plt.title(f"Travel times of test data during training")
+    plt.title(f"Travel times of testing phase during training")
     plt.plot([x.travel_time for x in no_autoencoder_results[1]], label="No autoencoder")
     plt.plot([x.travel_time for x in with_autoencoder_results[1]], label="With autoencoder")
     plt.legend()
@@ -116,7 +120,7 @@ def plot_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], Li
     plt.show()
 
     # Rewards plot
-    plt.title(f"Rewards of testing data during training")
+    plt.title(f"Rewards of testing phase during training")
     plt.plot([x.rewards for x in no_autoencoder_results[1]], label="No autoencoder")
     plt.plot([x.rewards for x in with_autoencoder_results[1]], label="With autoencoder")
     plt.legend()
@@ -127,7 +131,7 @@ def plot_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], Li
 
     # TODO: Potentially include broken-axes here (there's a lib).
     # Q_loss plot
-    plt.title(f"Q loss during training")
+    plt.title(f"Q loss of training phase during training")
     plt.plot([x.q_loss for x in no_autoencoder_results[0]], label="No autoencoder")
     plt.plot([x.q_loss for x in with_autoencoder_results[0]], label="With autoencoder")
     plt.legend()
@@ -136,10 +140,52 @@ def plot_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], Li
     plt.savefig(fname=f"./colight_results/plots/comparison/{model_names}_q_loss.png")
     plt.show()
 
+def plot_three_comparison_results(no_autoencoder_results: Tuple[List[TrainResults], List[TestResults]],
+                                  only_mode_results: Tuple[List[TrainResults], List[TestResults]],
+                                  with_autoencoder_results: Tuple[List[TrainResults], List[TestResults]],
+                                  model_names):
+    """
+    Compares the no_autoencoder_results and the with_autoencoder results.
+    """
+
+    # Travel times plot
+    plt.title(f"Travel times of testing phase during training")
+    plt.plot([x.travel_time for x in no_autoencoder_results[1]], label="No autoencoder")
+    plt.plot([x.travel_time for x in only_mode_results[1]], label="With autoencoder (mode only)")
+    plt.plot([x.travel_time for x in with_autoencoder_results[1]], label="With autoencoder (mode + uncertainty)")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Average travel time")
+    plt.savefig(fname=f"./colight_results/plots/triple comparison/{model_names}_travel_times.png")
+    plt.show()
+
+    # Rewards plot
+    plt.title(f"Rewards of testing phase during training")
+    plt.plot([x.rewards for x in no_autoencoder_results[1]], label="No autoencoder")
+    plt.plot([x.rewards for x in only_mode_results[1]], label="With autoencoder (mode only)")
+    plt.plot([x.rewards for x in with_autoencoder_results[1]], label="With autoencoder (mode + uncertainty)")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Rewards")
+    plt.savefig(fname=f"./colight_results/plots/triple comparison/{model_names}_rewards.png")
+    plt.show()
+
+    # TODO: Potentially include broken-axes here (there's a lib).
+    # Q_loss plot
+    plt.title(f"Q loss of training phase during training")
+    plt.plot([x.q_loss for x in no_autoencoder_results[0]], label="No autoencoder")
+    plt.plot([x.q_loss for x in only_mode_results[0]], label="With autoencoder (mode only)")
+    plt.plot([x.q_loss for x in with_autoencoder_results[0]], label="With autoencoder (mode + uncertainty)")
+    plt.legend()
+    plt.xlabel("Episodes")
+    plt.ylabel("Q loss")
+    plt.savefig(fname=f"./colight_results/plots/triple comparison/{model_names}_q_loss.png")
+    plt.show()
+
 
 if __name__ == "__main__":
     # Enter txt file.
-    results_txt = "colight_results/hidden_w_autoencoder1.txt"
+    results_txt = "colight_results/hidden_w_autoencoder_mode_only1.txt"
 
     # Parse the input
     training_results_list, testing_results_list = parse_results(results_txt)
@@ -148,6 +194,12 @@ if __name__ == "__main__":
     plot_single_results(training_results_list, testing_results_list, results_txt.split("/")[-1].split(".txt")[0])
 
     # Plot comparison
-    plot_comparison_results(parse_results("colight_results/hidden_no_autoencoder1.txt"),
-                            parse_results("colight_results/hidden_w_autoencoder1.txt"),
+    plot_two_comparison_results(parse_results("colight_results/hidden_no_autoencoder1.txt"),
+                                parse_results("colight_results/hidden_w_autoencoder1.txt"),
                             "hidden_no_and_with_autoencoder1")
+
+    # Plot three-way comparison
+    plot_three_comparison_results(parse_results("colight_results/hidden_no_autoencoder1.txt"),
+                                  parse_results("colight_results/hidden_w_autoencoder1.txt"),
+                                  parse_results("colight_results/hidden_w_autoencoder_mode_only1.txt"),
+                                  "hidden_no_and_with_autoencoder1")
